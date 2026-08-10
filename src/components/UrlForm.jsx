@@ -1,8 +1,8 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Youtube, Search, Clipboard, Loader2 } from 'lucide-react';
+import { Youtube, Search, Clipboard, Loader2, X } from 'lucide-react';
 
-export default function UrlForm({ url, setUrl, onSubmit, isLoading }) {
+export default function UrlForm({ url, setUrl, onSubmit, onClear, isLoading }) {
   const handlePaste = async () => {
     try {
       const text = await navigator.clipboard.readText();
@@ -40,6 +40,22 @@ export default function UrlForm({ url, setUrl, onSubmit, isLoading }) {
           disabled={isLoading}
         />
         <div className="input-actions">
+          {url.trim() && (
+            <motion.button
+              type="button"
+              className="btn-icon-action"
+              onClick={onClear}
+              disabled={isLoading}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              title="Limpiar enlace"
+              aria-label="Limpiar enlace"
+              style={{ padding: '0.4rem 0.65rem', fontSize: '0.78rem' }}
+            >
+              <X size={14} />
+              <span>Limpiar</span>
+            </motion.button>
+          )}
           <motion.button
             type="button"
             className="btn-icon-action"

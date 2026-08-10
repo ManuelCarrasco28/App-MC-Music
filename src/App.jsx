@@ -457,6 +457,7 @@ export default function App() {
               url={url}
               setUrl={setUrl}
               onSubmit={handleFetchInfo}
+              onClear={handleReset}
               isLoading={loadingInfo}
             />
 
