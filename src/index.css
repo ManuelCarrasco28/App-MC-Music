@@ -281,6 +281,30 @@ body {
   box-shadow: 0 8px 25px rgba(121, 40, 202, 0.4);
 }
 
+.btn-cancel-download {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+  padding: 0.65rem 1.1rem;
+  border: 1px solid rgba(255, 117, 143, 0.55);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 75, 110, 0.1);
+  color: #ff758f;
+  font-family: var(--font-heading);
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-cancel-download:hover {
+  color: #ffffff;
+  background: rgba(255, 75, 110, 0.3);
+  border-color: #ff758f;
+}
+
 .btn-primary:disabled {
   opacity: 0.6;
   cursor: not-allowed;

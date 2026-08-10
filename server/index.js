@@ -4,7 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { isValidYoutubeUrl } from './utils/validator.js';
 import { getVideoInfo, processDownload } from './services/downloader.js';
-import { finishDownloadProgress, isValidProgressJobId, openProgressStream } from './services/progressStore.js';
+import { cancelDownloadJob, finishDownloadProgress, isValidProgressJobId, openProgressStream } from './services/progressStore.js';
 import { ensureYtDlpBinary } from './utils/ytDlpHelper.js';
 import { validateAndPrepareFolder, openFolderInExplorer, pickFolderDialog } from './utils/folderHelper.js';
 
@@ -58,6 +58,14 @@ app.get('/api/progress/:jobId', (req, res) => {
     return res.status(400).json({ error: 'Identificador de descarga inválido.' });
   }
   openProgressStream(req.params.jobId, res);
+});
+
+app.post('/api/download/cancel/:jobId', (req, res) => {
+  if (!isValidProgressJobId(req.params.jobId)) {
+    return res.status(400).json({ error: 'Identificador de descarga inválido.' });
+  }
+  const cancelled = cancelDownloadJob(req.params.jobId);
+  res.json({ cancelled });
 });
 
 app.get('/api/download', async (req, res) => {

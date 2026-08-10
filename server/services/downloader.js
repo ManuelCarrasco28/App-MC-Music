@@ -5,7 +5,7 @@ import os from 'os';
 import { getYtDlpPath, getFfmpegPath, ensureYtDlpBinary } from '../utils/ytDlpHelper.js';
 import { normalizeYoutubeUrl } from '../utils/validator.js';
 import { validateAndPrepareFolder } from '../utils/folderHelper.js';
-import { finishDownloadProgress, updateDownloadProgress } from './progressStore.js';
+import { finishDownloadProgress, registerDownloadCancellation, updateDownloadProgress } from './progressStore.js';
 
 const tempDir = path.join(os.tmpdir(), 'mc_music_downloads');
 if (!fs.existsSync(tempDir)) {
@@ -331,10 +331,58 @@ export async function getVideoInfo(rawUrl) {
 
 export async function processDownload(req, res) {
   const { url: rawUrl, format = 'mp3', quality = '320', resolution = '720', customPath, directSaveOnly, jobId } = req.query;
+  let proc = null;
+  let tempFilePath = null;
+  let tempFilePrefix = null;
+  let cancelled = false;
+
+  const removeTemporaryFiles = (attempt = 0) => {
+    if (!tempFilePrefix || !fs.existsSync(tempDir)) return;
+    const matchingFiles = fs.readdirSync(tempDir)
+      .filter((name) => name.startsWith(`${tempFilePrefix}.`))
+      .map((name) => path.join(tempDir, name));
+
+    for (const matchingFile of matchingFiles) {
+      fs.unlink(matchingFile, (error) => {
+        if (error && attempt < 6) {
+          setTimeout(() => removeTemporaryFiles(attempt + 1), 300 * (attempt + 1));
+        }
+      });
+    }
+  };
+
+  const cancelDownload = () => {
+    if (cancelled) return;
+    cancelled = true;
+    console.log('[downloader] Descarga cancelada por el cliente.');
+
+    if (proc && !proc.killed) {
+      if (process.platform === 'win32') {
+        execFile('taskkill', ['/pid', String(proc.pid), '/T', '/F'], () => removeTemporaryFiles());
+      } else {
+        proc.kill('SIGTERM');
+      }
+    }
+    removeTemporaryFiles();
+    finishDownloadProgress(jobId, 'Descarga cancelada.');
+    if (!res.headersSent && !res.writableEnded && !res.destroyed) {
+      res.status(499).json({ error: 'Descarga cancelada.', code: 'DOWNLOAD_CANCELLED' });
+    }
+  };
+
+  registerDownloadCancellation(jobId, cancelDownload);
+  req.on('aborted', cancelDownload);
+  res.on('close', () => {
+    if (!res.writableEnded) cancelDownload();
+  });
+
   updateDownloadProgress(jobId, 1, 'preparing');
   await ensureYtDlpBinary();
 
+  if (cancelled || res.destroyed) return;
+
   if (!rawUrl) {
+    finishDownloadProgress(jobId, 'La URL de YouTube es requerida.');
     return res.status(400).json({ error: 'La URL de YouTube es requerida.' });
   }
 
@@ -346,15 +394,18 @@ export async function processDownload(req, res) {
   try {
     info = await getVideoInfo(url);
   } catch (err) {
+    if (cancelled) return;
     finishDownloadProgress(jobId, err.message);
     return res.status(400).json({ error: err.message });
   }
+  if (cancelled || res.destroyed) return;
   updateDownloadProgress(jobId, 5, 'starting');
 
   const cleanTitle = sanitizeFilename(info.title);
   const fileExt = format === 'mp4' ? 'mp4' : 'mp3';
   const fileName = `${cleanTitle}.${fileExt}`;
-  const tempFilePath = path.join(tempDir, `${info.id}_${Date.now()}.${fileExt}`);
+  tempFilePrefix = `${info.id}_${Date.now()}`;
+  tempFilePath = path.join(tempDir, `${tempFilePrefix}.${fileExt}`);
 
   const args = [
     '--no-warnings',
@@ -393,7 +444,7 @@ export async function processDownload(req, res) {
   console.log(`[downloader] Descargando [${format.toUpperCase()}] para: "${info.title}"`);
   const startTime = Date.now();
 
-  const proc = spawn(ytDlpPath, args, getYtDlpProcessOptions());
+  proc = spawn(ytDlpPath, args, getYtDlpProcessOptions());
   let stderrOutput = '';
   let latestProgress = 5;
 
@@ -424,6 +475,11 @@ export async function processDownload(req, res) {
   proc.on('close', (code) => {
     const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(1);
     console.log(`⚡ Conversión completada en ${elapsedSec}s (exit code ${code})`);
+
+    if (cancelled) {
+      removeTemporaryFiles();
+      return;
+    }
 
     if (code !== 0 || !fs.existsSync(tempFilePath)) {
       const failure = classifyDownloadError(stderrOutput, code);
@@ -511,18 +567,4 @@ export async function processDownload(req, res) {
     }
   });
 
-  const cancelDownload = () => {
-    if (proc && !proc.killed) {
-      console.log('[downloader] Petición cancelada por el cliente.');
-      proc.kill('SIGTERM');
-      if (fs.existsSync(tempFilePath)) {
-        fs.unlink(tempFilePath, () => {});
-      }
-    }
-  };
-
-  req.on('aborted', cancelDownload);
-  res.on('close', () => {
-    if (!res.writableEnded) cancelDownload();
-  });
 }

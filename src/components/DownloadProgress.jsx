@@ -1,9 +1,9 @@
 import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { CheckCircle2, RefreshCw } from 'lucide-react';
+import { CheckCircle2, RefreshCw, XCircle } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
-export default function DownloadProgress({ isDownloading, isCompleted, format, quality, resolution, progress, title, savedToPath, isDirectSave, onReset }) {
+export default function DownloadProgress({ isDownloading, isCompleted, format, quality, resolution, progress, title, savedToPath, isDirectSave, onCancel, onReset }) {
   const safeProgress = Math.min(100, Math.max(0, Math.round(Number(progress) || 0)));
   useEffect(() => {
     if (isCompleted) {
@@ -62,6 +62,17 @@ export default function DownloadProgress({ isDownloading, isCompleted, format, q
           <span style={{ fontSize: '0.85rem', color: 'var(--text-dim)' }}>
             Procesando {format === 'mp3' ? `audio MP3 a ${quality} kbps` : `video MP4 a ${resolution}p`}.
           </span>
+
+          <motion.button
+            type="button"
+            className="btn-cancel-download"
+            onClick={onCancel}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+          >
+            <XCircle size={18} />
+            <span>Cancelar descarga</span>
+          </motion.button>
         </>
       ) : isCompleted ? (
         <>

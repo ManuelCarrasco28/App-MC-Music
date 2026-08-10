@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Header from './components/Header';
 import UrlForm from './components/UrlForm';
 import VideoCard from './components/VideoCard';
@@ -117,6 +117,8 @@ export default function App() {
   const [isCompleted, setIsCompleted] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [lastSavedPath, setLastSavedPath] = useState('');
+  const downloadAbortControllerRef = useRef(null);
+  const activeDownloadJobIdRef = useRef('');
 
   // Rutas separadas para MP3 y MP4
   const [mp3FolderPath, setMp3FolderPath] = useState(() => {
@@ -236,6 +238,9 @@ export default function App() {
 
     const jobId = globalThis.crypto?.randomUUID?.()
       || `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const downloadController = new AbortController();
+    downloadAbortControllerRef.current = downloadController;
+    activeDownloadJobIdRef.current = jobId;
     const downloadParams = new URLSearchParams({
       url: videoInfo.url,
       format,
@@ -265,7 +270,7 @@ export default function App() {
     try {
       if (isDirectSaveToPC) {
         // Modo Guardar en mi PC (PC / Laptops)
-        const res = await fetch(downloadUrl);
+        const res = await fetch(downloadUrl, { signal: downloadController.signal });
         const contentType = res.headers.get('content-type') || '';
         let savedPathResult = selectedFolderPath;
 
@@ -299,7 +304,7 @@ export default function App() {
         setHistory((prev) => [newHistoryItem, ...prev.filter(h => h.url !== videoInfo.url)].slice(0, 8));
       } else {
         // Modo Descarga Normal (PC, Laptops o Teléfonos Móviles)
-        const res = await fetch(downloadUrl);
+        const res = await fetch(downloadUrl, { signal: downloadController.signal });
 
         if (!res.ok) {
           throw new Error('Error al procesar la conversión del video.');
@@ -339,11 +344,31 @@ export default function App() {
 
     } catch (err) {
       console.error('Error al solicitar la descarga:', err);
-      setError(err.message || 'No se pudo iniciar la descarga. Inténtalo de nuevo.');
+      setError(err.name === 'AbortError'
+        ? 'Descarga cancelada.'
+        : (err.message || 'No se pudo iniciar la descarga. Inténtalo de nuevo.'));
       setIsDownloading(false);
     } finally {
       progressSource.close();
+      if (downloadAbortControllerRef.current === downloadController) {
+        downloadAbortControllerRef.current = null;
+        activeDownloadJobIdRef.current = '';
+      }
     }
+  };
+
+  const handleCancelDownload = () => {
+    if (!isDownloading) return;
+    const activeJobId = activeDownloadJobIdRef.current;
+    if (activeJobId) {
+      fetch(`/api/download/cancel/${encodeURIComponent(activeJobId)}`, { method: 'POST' })
+        .catch((cancelError) => console.warn('No se pudo notificar la cancelación:', cancelError.message));
+    }
+    downloadAbortControllerRef.current?.abort();
+    setIsDownloading(false);
+    setIsCompleted(false);
+    setDownloadProgress(0);
+    setError('Descarga cancelada.');
   };
 
   const handleReset = () => {
@@ -496,6 +521,7 @@ export default function App() {
                 title={videoInfo?.title || ''}
                 savedToPath={lastSavedPath}
                 isDirectSave={!isMobile && hasConfiguredFolders && saveToPCSwitch}
+                onCancel={handleCancelDownload}
                 onReset={handleReset}
               />
             )}

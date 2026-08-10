@@ -12,6 +12,7 @@ function getOrCreateJob(jobId) {
       listeners: new Set(),
       lastEvent: { progress: 0, stage: 'preparing' },
       finished: false,
+      cancelHandler: null,
       cleanupTimer: null
     };
     progressJobs.set(jobId, job);
@@ -65,12 +66,31 @@ export function updateDownloadProgress(jobId, progress, stage = 'downloading') {
   for (const listener of job.listeners) sendEvent(listener, job.lastEvent);
 }
 
+export function registerDownloadCancellation(jobId, cancelHandler) {
+  if (!isValidProgressJobId(jobId) || typeof cancelHandler !== 'function') return false;
+  const job = getOrCreateJob(jobId);
+  if (job.finished) return false;
+  job.cancelHandler = cancelHandler;
+  return true;
+}
+
+export function cancelDownloadJob(jobId) {
+  if (!isValidProgressJobId(jobId)) return false;
+  const job = progressJobs.get(jobId);
+  if (!job || job.finished || typeof job.cancelHandler !== 'function') return false;
+  const cancelHandler = job.cancelHandler;
+  job.cancelHandler = null;
+  cancelHandler();
+  return true;
+}
+
 export function finishDownloadProgress(jobId, error = null) {
   if (!isValidProgressJobId(jobId)) return;
   const job = getOrCreateJob(jobId);
   if (job.finished) return;
 
   job.finished = true;
+  job.cancelHandler = null;
   job.lastEvent = error
     ? { progress: Number(job.lastEvent.progress) || 0, stage: 'error', error }
     : { progress: 100, stage: 'completed' };
