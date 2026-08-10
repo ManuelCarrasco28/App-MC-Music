@@ -107,6 +107,17 @@ async function getPlayerApiStats(videoId) {
   };
 }
 
+async function getPublicViewCount(videoId) {
+  const response = await fetch(`https://returnyoutubedislikeapi.com/votes?videoId=${encodeURIComponent(videoId)}`, {
+    headers: { 'User-Agent': 'MC-Music/1.0' },
+    signal: AbortSignal.timeout(8000)
+  });
+
+  if (!response.ok) return 0;
+  const data = await response.json();
+  return Number(data.viewCount) || 0;
+}
+
 async function getPublicPageStats(url) {
   const videoId = new URL(url).searchParams.get('v');
 
@@ -158,6 +169,14 @@ async function getOEmbedInfo(url) {
     stats = await getPublicPageStats(url);
   } catch (statsError) {
     console.warn('[downloader] No se pudieron completar duración y vistas:', statsError.message);
+  }
+
+  if (!stats.views) {
+    try {
+      stats.views = await getPublicViewCount(videoId);
+    } catch (viewsError) {
+      console.warn('[downloader] No se pudo completar el contador de vistas:', viewsError.message);
+    }
   }
 
   return {

@@ -8,6 +8,73 @@ import HistoryList from './components/HistoryList';
 import SettingsSection from './components/SettingsSection';
 import { AlertCircle, Music2, ShieldCheck, Zap, HardDrive, Download } from 'lucide-react';
 
+let youtubeIframeApiPromise;
+
+function loadYoutubeIframeApi() {
+  if (window.YT?.Player) return Promise.resolve(window.YT);
+  if (youtubeIframeApiPromise) return youtubeIframeApiPromise;
+
+  youtubeIframeApiPromise = new Promise((resolve, reject) => {
+    const previousReadyHandler = window.onYouTubeIframeAPIReady;
+    const timeoutId = window.setTimeout(() => reject(new Error('YouTube Player API no respondió.')), 12000);
+
+    window.onYouTubeIframeAPIReady = () => {
+      window.clearTimeout(timeoutId);
+      if (typeof previousReadyHandler === 'function') previousReadyHandler();
+      resolve(window.YT);
+    };
+
+    if (!document.querySelector('script[src="https://www.youtube.com/iframe_api"]')) {
+      const script = document.createElement('script');
+      script.src = 'https://www.youtube.com/iframe_api';
+      script.async = true;
+      script.onerror = () => reject(new Error('No se pudo cargar YouTube Player API.'));
+      document.head.appendChild(script);
+    }
+  });
+
+  return youtubeIframeApiPromise;
+}
+
+function formatVideoDuration(seconds) {
+  const total = Math.max(0, Math.floor(Number(seconds) || 0));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const remainingSeconds = total % 60;
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`
+    : `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
+}
+
+async function getBrowserVideoDuration(videoId) {
+  const YT = await loadYoutubeIframeApi();
+  const container = document.createElement('div');
+  container.style.cssText = 'position:fixed;width:1px;height:1px;left:-9999px;top:-9999px;opacity:0;pointer-events:none;';
+  document.body.appendChild(container);
+
+  return new Promise((resolve) => {
+    let player;
+    const timeoutId = window.setTimeout(() => finish(0), 12000);
+    const finish = (duration) => {
+      window.clearTimeout(timeoutId);
+      try { player?.destroy(); } catch {}
+      container.remove();
+      resolve(Math.floor(Number(duration) || 0));
+    };
+
+    player = new YT.Player(container, {
+      width: 1,
+      height: 1,
+      videoId,
+      playerVars: { autoplay: 0, controls: 0, playsinline: 1 },
+      events: {
+        onReady: (event) => finish(event.target.getDuration()),
+        onError: () => finish(0)
+      }
+    });
+  });
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('downloader'); // 'downloader' | 'settings'
 
@@ -123,6 +190,16 @@ export default function App() {
       }
 
       setVideoInfo(data);
+      if (!data.duration && data.id) {
+        getBrowserVideoDuration(data.id)
+          .then((duration) => {
+            if (!duration) return;
+            setVideoInfo((current) => current?.id === data.id
+              ? { ...current, duration, durationFormatted: formatVideoDuration(duration) }
+              : current);
+          })
+          .catch((durationError) => console.warn('No se pudo calcular la duración:', durationError.message));
+      }
       if (data.videoResolutions && data.videoResolutions.length > 0) {
         setResolution(data.videoResolutions[0]);
       }
