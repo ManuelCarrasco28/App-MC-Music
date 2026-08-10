@@ -5,6 +5,7 @@ import os from 'os';
 import { getYtDlpPath, getFfmpegPath, ensureYtDlpBinary } from '../utils/ytDlpHelper.js';
 import { normalizeYoutubeUrl } from '../utils/validator.js';
 import { validateAndPrepareFolder } from '../utils/folderHelper.js';
+import { finishDownloadProgress, updateDownloadProgress } from './progressStore.js';
 
 const tempDir = path.join(os.tmpdir(), 'mc_music_downloads');
 if (!fs.existsSync(tempDir)) {
@@ -329,8 +330,9 @@ export async function getVideoInfo(rawUrl) {
 }
 
 export async function processDownload(req, res) {
+  const { url: rawUrl, format = 'mp3', quality = '320', resolution = '720', customPath, directSaveOnly, jobId } = req.query;
+  updateDownloadProgress(jobId, 1, 'preparing');
   await ensureYtDlpBinary();
-  const { url: rawUrl, format = 'mp3', quality = '320', resolution = '720', customPath, directSaveOnly } = req.query;
 
   if (!rawUrl) {
     return res.status(400).json({ error: 'La URL de YouTube es requerida.' });
@@ -344,8 +346,10 @@ export async function processDownload(req, res) {
   try {
     info = await getVideoInfo(url);
   } catch (err) {
+    finishDownloadProgress(jobId, err.message);
     return res.status(400).json({ error: err.message });
   }
+  updateDownloadProgress(jobId, 5, 'starting');
 
   const cleanTitle = sanitizeFilename(info.title);
   const fileExt = format === 'mp4' ? 'mp4' : 'mp3';
@@ -358,6 +362,10 @@ export async function processDownload(req, res) {
     ...getYoutubeRuntimeArgs(),
     '--ffmpeg-location', ffmpegPath,
     '--concurrent-fragments', '5',
+    '--newline',
+    '--no-color',
+    '--progress-delta', '0.2',
+    '--progress-template', 'download:MC_PROGRESS:%(progress._percent_str)s',
     '-o', tempFilePath
   ];
 
@@ -387,8 +395,25 @@ export async function processDownload(req, res) {
 
   const proc = spawn(ytDlpPath, args, getYtDlpProcessOptions());
   let stderrOutput = '';
+  let latestProgress = 5;
+
+  const handleProgressOutput = (data) => {
+    const output = data.toString();
+    for (const match of output.matchAll(/MC_PROGRESS:\s*([\d.]+)%/g)) {
+      const sourceProgress = Number(match[1]);
+      if (!Number.isFinite(sourceProgress)) continue;
+      const mappedProgress = Math.min(90, Math.max(5, Math.round(5 + sourceProgress * 0.85)));
+      if (mappedProgress > latestProgress) {
+        latestProgress = mappedProgress;
+        updateDownloadProgress(jobId, latestProgress, 'downloading');
+      }
+    }
+  };
+
+  proc.stdout.on('data', handleProgressOutput);
 
   proc.stderr.on('data', (data) => {
+    handleProgressOutput(data);
     const msg = data.toString();
     stderrOutput = `${stderrOutput}${msg}`.slice(-12000);
     if (msg.includes('[download]') || msg.includes('[ExtractAudio]') || msg.includes('[Merger]')) {
@@ -402,12 +427,14 @@ export async function processDownload(req, res) {
 
     if (code !== 0 || !fs.existsSync(tempFilePath)) {
       const failure = classifyDownloadError(stderrOutput, code);
+      finishDownloadProgress(jobId, failure.message);
       console.error(`[downloader] Proceso yt-dlp falló con código ${code} (${failure.code}):`, stderrOutput);
       if (!res.headersSent) {
         return res.status(502).json({ error: failure.message, code: failure.code });
       }
       return;
     }
+    updateDownloadProgress(jobId, 95, 'finalizing');
 
     const targetFolderPath = customPath && customPath.trim() ? customPath.trim() : '';
 
@@ -416,6 +443,7 @@ export async function processDownload(req, res) {
       const folderCheck = validateAndPrepareFolder(targetFolderPath);
       if (!folderCheck.valid) {
         fs.unlink(tempFilePath, () => {});
+        finishDownloadProgress(jobId, folderCheck.error);
         return res.status(400).json({ error: folderCheck.error });
       }
       try {
@@ -431,10 +459,12 @@ export async function processDownload(req, res) {
     if (directSaveOnly === 'true' || String(directSaveOnly) === '1') {
       if (!savedToCustomFolder) {
         fs.unlink(tempFilePath, () => {});
+        finishDownloadProgress(jobId, 'No se configuró una carpeta de destino válida.');
         return res.status(400).json({ error: 'No se configuró una carpeta de destino válida.' });
       }
       fs.unlink(tempFilePath, () => {});
       res.setHeader('Content-Type', 'application/json');
+      finishDownloadProgress(jobId);
       return res.json({
         success: true,
         savedToPath: savedToCustomFolder || targetFolderPath,
@@ -445,6 +475,7 @@ export async function processDownload(req, res) {
 
     const contentType = format === 'mp4' ? 'video/mp4' : 'audio/mpeg';
     const stat = fs.statSync(tempFilePath);
+    updateDownloadProgress(jobId, 97, 'transferring');
 
     res.writeHead(200, {
       'Content-Type': contentType,
@@ -463,14 +494,18 @@ export async function processDownload(req, res) {
       });
     });
 
+    res.on('finish', () => finishDownloadProgress(jobId));
+
     readStream.on('error', (err) => {
       console.error('[downloader] Error transmitiendo stream:', err);
+      finishDownloadProgress(jobId, 'Error transmitiendo el archivo descargado.');
       fs.unlink(tempFilePath, () => {});
     });
   });
 
   proc.on('error', (err) => {
     console.error('[downloader] Error al spawnear yt-dlp:', err);
+    finishDownloadProgress(jobId, 'Error interno en el servidor de conversión.');
     if (!res.headersSent) {
       res.status(500).json({ error: 'Error interno en el servidor de conversión.' });
     }

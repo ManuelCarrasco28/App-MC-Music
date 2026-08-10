@@ -115,6 +115,7 @@ export default function App() {
 
   const [isDownloading, setIsDownloading] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
   const [lastSavedPath, setLastSavedPath] = useState('');
 
   // Rutas separadas para MP3 y MP4
@@ -226,17 +227,21 @@ export default function App() {
 
     setIsDownloading(true);
     setIsCompleted(false);
+    setDownloadProgress(0);
     setError(null);
     setLastSavedPath('');
 
     const selectedFolderPath = format === 'mp3' ? mp3FolderPath : mp4FolderPath;
     const isDirectSaveToPC = !isMobile && hasConfiguredFolders && saveToPCSwitch;
 
+    const jobId = globalThis.crypto?.randomUUID?.()
+      || `${Date.now()}_${Math.random().toString(36).slice(2)}`;
     const downloadParams = new URLSearchParams({
       url: videoInfo.url,
       format,
       quality: format === 'mp3' ? quality : '',
-      resolution: format === 'mp4' ? resolution : ''
+      resolution: format === 'mp4' ? resolution : '',
+      jobId
     });
 
     if (isDirectSaveToPC && selectedFolderPath && selectedFolderPath.trim()) {
@@ -245,6 +250,17 @@ export default function App() {
     }
 
     const downloadUrl = `/api/download?${downloadParams.toString()}`;
+    const progressSource = new EventSource(`/api/progress/${encodeURIComponent(jobId)}`);
+    progressSource.onmessage = (event) => {
+      try {
+        const progressEvent = JSON.parse(event.data);
+        if (Number.isFinite(Number(progressEvent.progress))) {
+          setDownloadProgress(Math.min(100, Math.max(0, Number(progressEvent.progress))));
+        }
+      } catch (progressError) {
+        console.warn('No se pudo interpretar el progreso:', progressError.message);
+      }
+    };
 
     try {
       if (isDirectSaveToPC) {
@@ -266,6 +282,7 @@ export default function App() {
         }
 
         setLastSavedPath(savedPathResult);
+        setDownloadProgress(100);
         setIsDownloading(false);
         setIsCompleted(true);
 
@@ -303,6 +320,7 @@ export default function App() {
         window.URL.revokeObjectURL(blobUrl);
 
         setLastSavedPath('Descarga del navegador');
+        setDownloadProgress(100);
         setIsDownloading(false);
         setIsCompleted(true);
 
@@ -323,6 +341,8 @@ export default function App() {
       console.error('Error al solicitar la descarga:', err);
       setError(err.message || 'No se pudo iniciar la descarga. Inténtalo de nuevo.');
       setIsDownloading(false);
+    } finally {
+      progressSource.close();
     }
   };
 
@@ -330,6 +350,7 @@ export default function App() {
     setVideoInfo(null);
     setUrl('');
     setIsCompleted(false);
+    setDownloadProgress(0);
     setError(null);
     setLastSavedPath('');
   };
@@ -470,6 +491,7 @@ export default function App() {
                 format={format}
                 quality={quality}
                 resolution={resolution}
+                progress={downloadProgress}
                 title={videoInfo?.title || ''}
                 savedToPath={lastSavedPath}
                 isDirectSave={!isMobile && hasConfiguredFolders && saveToPCSwitch}

@@ -3,7 +3,8 @@ import { motion } from 'framer-motion';
 import { CheckCircle2, RefreshCw } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
-export default function DownloadProgress({ isDownloading, isCompleted, format, quality, resolution, title, savedToPath, isDirectSave, onReset }) {
+export default function DownloadProgress({ isDownloading, isCompleted, format, quality, resolution, progress, title, savedToPath, isDirectSave, onReset }) {
+  const safeProgress = Math.min(100, Math.max(0, Math.round(Number(progress) || 0)));
   useEffect(() => {
     if (isCompleted) {
       try {
@@ -49,10 +50,14 @@ export default function DownloadProgress({ isDownloading, isCompleted, format, q
             <motion.div 
               className="progress-bar-fill"
               initial={{ width: '0%' }}
-              animate={{ width: '100%' }}
-              transition={{ duration: 4.5, ease: "easeInOut" }}
+              animate={{ width: `${safeProgress}%` }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
             />
           </div>
+
+          <strong style={{ fontSize: '1rem', color: 'var(--accent-cyan)', fontFamily: 'var(--font-heading)' }}>
+            {safeProgress}% completado
+          </strong>
 
           <span style={{ fontSize: '0.85rem', color: 'var(--text-dim)' }}>
             Procesando {format === 'mp3' ? `audio MP3 a ${quality} kbps` : `video MP4 a ${resolution}p`}.
