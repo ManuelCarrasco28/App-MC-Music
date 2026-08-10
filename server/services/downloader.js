@@ -39,7 +39,6 @@ function getYoutubeRuntimeArgs() {
   return [
     '--js-runtimes', `node:${process.execPath}`,
     '--remote-components', 'ejs:github',
-    '--extractor-args', 'youtube:player_client=android',
     '--force-ipv4',
     '--retries', '3',
     '--fragment-retries', '3'
@@ -301,12 +300,13 @@ export async function getVideoInfo(rawUrl) {
 
         // Extraer resoluciones reales disponibles en el video de YouTube
         const rawHeights = (info.formats || [])
+          .filter(f => f.vcodec && f.vcodec !== 'none')
           .map(f => f.height)
           .filter(h => typeof h === 'number' && h >= 240)
           .sort((a, b) => b - a);
 
         const uniqueHeights = [...new Set(rawHeights)].map(String);
-        const videoResolutions = uniqueHeights.length > 0 ? uniqueHeights.slice(0, 5) : ['1080', '720', '480', '360'];
+        const videoResolutions = uniqueHeights.length > 0 ? uniqueHeights : ['1080', '720', '480', '360'];
 
         resolve({
           id: info.id,
@@ -375,7 +375,7 @@ export async function processDownload(req, res) {
   } else {
     const resLimit = parseInt(resolution, 10) || 720;
     args.push(
-      '-f', `bestvideo[height=${resLimit}]+bestaudio/best[height=${resLimit}]/bestvideo[height<=${resLimit}]+bestaudio/best[height<=${resLimit}]`,
+      '-f', `bestvideo[height=${resLimit}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height=${resLimit}]+bestaudio/best[height=${resLimit}][ext=mp4]/bestvideo[height<=${resLimit}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=${resLimit}]+bestaudio/best[height<=${resLimit}][ext=mp4]`,
       '--merge-output-format', 'mp4'
     );
   }
