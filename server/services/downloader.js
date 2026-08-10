@@ -39,10 +39,51 @@ function getYoutubeRuntimeArgs() {
   return [
     '--js-runtimes', `node:${process.execPath}`,
     '--remote-components', 'ejs:github',
+    '--extractor-args', 'youtube:player_client=android',
     '--force-ipv4',
     '--retries', '3',
     '--fragment-retries', '3'
   ];
+}
+
+function classifyDownloadError(stderr, exitCode) {
+  const detail = String(stderr || '').toLowerCase();
+
+  if (detail.includes('sign in to confirm') || detail.includes('not a bot')) {
+    return {
+      code: 'YOUTUBE_BOT_CHECK',
+      message: 'YouTube bloqueó temporalmente la IP del servidor. Inténtalo nuevamente más tarde.'
+    };
+  }
+  if (detail.includes('javascript runtime') || detail.includes('js runtime')) {
+    return {
+      code: 'YOUTUBE_JS_RUNTIME',
+      message: 'El servidor no pudo resolver la verificación JavaScript de YouTube.'
+    };
+  }
+  if (detail.includes('requested format is not available') || detail.includes('no video formats')) {
+    return {
+      code: 'FORMAT_UNAVAILABLE',
+      message: 'La calidad seleccionada no está disponible para este video.'
+    };
+  }
+  if (detail.includes('ffmpeg')) {
+    return {
+      code: 'FFMPEG_ERROR',
+      message: 'FFmpeg no pudo convertir el archivo solicitado.'
+    };
+  }
+  if (detail.includes('http error 403')) {
+    return {
+      code: 'YOUTUBE_FORBIDDEN',
+      message: 'YouTube rechazó la descarga desde este servidor.'
+    };
+  }
+
+  return {
+    code: `YTDLP_EXIT_${exitCode ?? 'UNKNOWN'}`,
+    message: 'Fallo al procesar la conversión de audio/video.'
+  };
 }
 
 const YOUTUBE_BROWSER_HEADERS = {
@@ -328,9 +369,11 @@ export async function processDownload(req, res) {
   const startTime = Date.now();
 
   const proc = spawn(ytDlpPath, args);
+  let stderrOutput = '';
 
   proc.stderr.on('data', (data) => {
     const msg = data.toString();
+    stderrOutput = `${stderrOutput}${msg}`.slice(-12000);
     if (msg.includes('[download]') || msg.includes('[ExtractAudio]') || msg.includes('[Merger]')) {
       console.log(`[yt-dlp log] ${msg.trim()}`);
     }
@@ -341,9 +384,10 @@ export async function processDownload(req, res) {
     console.log(`⚡ Conversión completada en ${elapsedSec}s (exit code ${code})`);
 
     if (code !== 0 || !fs.existsSync(tempFilePath)) {
-      console.error(`[downloader] Proceso yt-dlp falló con código ${code}`);
+      const failure = classifyDownloadError(stderrOutput, code);
+      console.error(`[downloader] Proceso yt-dlp falló con código ${code} (${failure.code}):`, stderrOutput);
       if (!res.headersSent) {
-        return res.status(500).json({ error: 'Fallo al procesar la conversión de audio/video.' });
+        return res.status(502).json({ error: failure.message, code: failure.code });
       }
       return;
     }
