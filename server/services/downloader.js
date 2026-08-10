@@ -45,12 +45,80 @@ function getYoutubeRuntimeArgs() {
   ];
 }
 
+const YOUTUBE_BROWSER_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36',
+  'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8'
+};
+
+async function requestPlayerDetails(videoId, apiKey, client) {
+  const response = await fetch(`https://www.youtube.com/youtubei/v1/player?key=${encodeURIComponent(apiKey)}`, {
+    method: 'POST',
+    headers: { ...YOUTUBE_BROWSER_HEADERS, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      videoId,
+      context: { client: { ...client, hl: 'es', gl: 'PE' } }
+    }),
+    signal: AbortSignal.timeout(10000)
+  });
+
+  if (!response.ok) return null;
+  const data = await response.json();
+  return data.videoDetails || null;
+}
+
+async function getPlayerApiStats(videoId) {
+  const embedResponse = await fetch(`https://www.youtube.com/embed/${videoId}`, {
+    headers: YOUTUBE_BROWSER_HEADERS,
+    signal: AbortSignal.timeout(10000)
+  });
+
+  if (!embedResponse.ok) {
+    throw new Error(`El reproductor de YouTube respondió con estado ${embedResponse.status}`);
+  }
+
+  const embedHtml = await embedResponse.text();
+  const apiKey = embedHtml.match(/"INNERTUBE_API_KEY":"([^"]+)"/)?.[1];
+  const webVersion = embedHtml.match(/"INNERTUBE_CLIENT_VERSION":"([^"]+)"/)?.[1];
+
+  if (!apiKey || !webVersion) {
+    throw new Error('YouTube no publicó la configuración del reproductor.');
+  }
+
+  let details = await requestPlayerDetails(videoId, apiKey, {
+    clientName: 'WEB',
+    clientVersion: webVersion
+  });
+
+  if (!details) {
+    details = await requestPlayerDetails(videoId, apiKey, {
+      clientName: 'ANDROID',
+      clientVersion: '20.10.38',
+      androidSdkVersion: 35
+    });
+  }
+
+  if (!details) {
+    throw new Error('YouTube no devolvió detalles públicos del video.');
+  }
+
+  return {
+    duration: Number(details.lengthSeconds) || 0,
+    views: Number(details.viewCount) || 0
+  };
+}
+
 async function getPublicPageStats(url) {
+  const videoId = new URL(url).searchParams.get('v');
+
+  try {
+    const playerStats = await getPlayerApiStats(videoId);
+    if (playerStats.duration || playerStats.views) return playerStats;
+  } catch (playerError) {
+    console.warn('[downloader] Falló el respaldo del reproductor:', playerError.message);
+  }
+
   const response = await fetch(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36',
-      'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8'
-    },
+    headers: YOUTUBE_BROWSER_HEADERS,
     signal: AbortSignal.timeout(10000)
   });
 
