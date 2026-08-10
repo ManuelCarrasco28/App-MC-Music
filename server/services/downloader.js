@@ -44,12 +44,13 @@ export async function getVideoInfo(rawUrl) {
     '--dump-single-json',
     '--no-warnings',
     '--no-call-home',
-    '--prefer-free-formats',
+    '--skip-download',
+    '--no-playlist',
     url
   ];
 
   return new Promise((resolve, reject) => {
-    execFile(ytDlpPath, args, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
+    execFile(ytDlpPath, args, { maxBuffer: 10 * 1024 * 1024, timeout: 30000 }, (error, stdout, stderr) => {
       if (error) {
         console.error('[downloader] Error en execFile yt-dlp info:', stderr || error.message);
         return reject(new Error('No se pudo procesar la información del video de YouTube. Verifica el enlace.'));
@@ -145,7 +146,7 @@ export async function processDownload(req, res) {
 
   args.push(url);
 
-  console.log(`[downloader] Descargando [${format.toUpperCase()}] para: "${info.title}" (Resolución/Calidad: ${format === 'mp3' ? quality + 'kbps' : resolution + 'p'})`);
+  console.log(`[downloader] Descargando [${format.toUpperCase()}] para: "${info.title}"`);
   const startTime = Date.now();
 
   const proc = spawn(ytDlpPath, args);
@@ -182,7 +183,7 @@ export async function processDownload(req, res) {
         const destinationPath = path.join(folderCheck.path, fileName);
         fs.copyFileSync(tempFilePath, destinationPath);
         savedToCustomFolder = destinationPath;
-        console.log(`[downloader] ¡Archivo guardado con éxito en la PC en ${elapsedSec}s!: "${destinationPath}"`);
+        console.log(`[downloader] Archivo guardado en la PC en ${elapsedSec}s: "${destinationPath}"`);
       } catch (copyErr) {
         console.error('[downloader] Error al copiar a carpeta personalizada:', copyErr);
       }

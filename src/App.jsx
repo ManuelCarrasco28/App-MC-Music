@@ -11,27 +11,18 @@ import { AlertCircle, Music2, ShieldCheck, Zap, HardDrive, Download } from 'luci
 export default function App() {
   const [activeTab, setActiveTab] = useState('downloader'); // 'downloader' | 'settings'
 
-  // Detección en tiempo real de móviles o entorno Web Nube (Vercel)
+  // Detección estricta de teléfonos móviles: En PC y Laptops se muestra el diseño completo con historial y configuración de carpetas
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === 'undefined') return false;
     return window.innerWidth <= 768 || /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  });
-
-  const [isVercelWeb, setIsVercelWeb] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    const host = window.location.hostname;
-    return host.includes('vercel.app') || (host !== 'localhost' && host !== '127.0.0.1' && host !== '');
   });
 
   useEffect(() => {
     const handleResize = () => {
       const mobileCheck = window.innerWidth <= 768 || /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
       setIsMobile(mobileCheck);
-      const host = window.location.hostname;
-      const cloudCheck = host.includes('vercel.app') || (host !== 'localhost' && host !== '127.0.0.1' && host !== '');
-      setIsVercelWeb(cloudCheck);
 
-      if ((mobileCheck || cloudCheck) && activeTab === 'settings') {
+      if (mobileCheck && activeTab === 'settings') {
         setActiveTab('downloader');
       }
     };
@@ -39,9 +30,6 @@ export default function App() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, [activeTab]);
-
-  // Solo se permite la configuración de carpetas de PC cuando la app se ejecuta localmente en la computadora
-  const isDesktopLocalMode = !isMobile && !isVercelWeb;
 
   const [url, setUrl] = useState('');
   const [videoInfo, setVideoInfo] = useState(null);
@@ -70,9 +58,9 @@ export default function App() {
   });
 
   // Determinar si el usuario ya configuró AMBAS carpetas en su PC (MP3 y MP4)
-  const hasConfiguredFolders = Boolean(isDesktopLocalMode && mp3FolderPath && mp3FolderPath.trim() && mp4FolderPath && mp4FolderPath.trim());
+  const hasConfiguredFolders = Boolean(!isMobile && mp3FolderPath && mp3FolderPath.trim() && mp4FolderPath && mp4FolderPath.trim());
 
-  // Activador de Modo de Descarga (solo activo en escritorio local)
+  // Activador de Modo de Descarga (disponible en PC y Laptops)
   const [saveToPCSwitch, setSaveToPCSwitch] = useState(() => {
     const saved = localStorage.getItem('mc_music_save_to_pc_switch');
     return saved !== null ? saved === 'true' : true;
@@ -154,7 +142,7 @@ export default function App() {
     setLastSavedPath('');
 
     const selectedFolderPath = format === 'mp3' ? mp3FolderPath : mp4FolderPath;
-    const isDirectSaveToPC = isDesktopLocalMode && hasConfiguredFolders && saveToPCSwitch;
+    const isDirectSaveToPC = !isMobile && hasConfiguredFolders && saveToPCSwitch;
 
     const downloadParams = new URLSearchParams({
       url: videoInfo.url,
@@ -172,7 +160,7 @@ export default function App() {
 
     try {
       if (isDirectSaveToPC) {
-        // Modo Guardar en mi PC (solo escritorio local)
+        // Modo Guardar en mi PC (PC / Laptops)
         const res = await fetch(downloadUrl);
         const contentType = res.headers.get('content-type') || '';
         let savedPathResult = selectedFolderPath;
@@ -205,7 +193,7 @@ export default function App() {
 
         setHistory((prev) => [newHistoryItem, ...prev.filter(h => h.url !== videoInfo.url)].slice(0, 8));
       } else {
-        // Modo Descarga Web / Navegador (Vercel o Móvil)
+        // Modo Descarga Normal (PC, Laptops o Teléfonos Móviles)
         const res = await fetch(downloadUrl);
 
         if (!res.ok) {
@@ -267,7 +255,7 @@ export default function App() {
       <Header
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        showDesktopSettings={isDesktopLocalMode}
+        showDesktopSettings={!isMobile}
       />
 
       <main style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
@@ -282,8 +270,8 @@ export default function App() {
                 Convierte y descarga audio en alta fidelidad 320kbps o videos en HD directamente desde YouTube.
               </p>
 
-              {/* MOSTRAR SELECTOR DE MODO ÚNICAMENTE EN ESCRITORIO LOCAL CUANDO EL USUARIO CONFIGURÓ AMBAS CARPETAS */}
-              {isDesktopLocalMode && hasConfiguredFolders && (
+              {/* MOSTRAR SELECTOR DE MODO EN ESCRITORIO (PC/LAPTOPS) CUANDO EL USUARIO CONFIGURÓ AMBAS CARPETAS */}
+              {!isMobile && hasConfiguredFolders && (
                 <div style={{ display: 'flex', justifyContent: 'center', marginTop: '0.8rem', animation: 'fadeIn 0.3s ease-out' }}>
                   <div style={{
                     display: 'inline-flex',
@@ -394,7 +382,7 @@ export default function App() {
                 format={format}
                 title={videoInfo?.title || ''}
                 savedToPath={lastSavedPath}
-                isDirectSave={isDesktopLocalMode && hasConfiguredFolders && saveToPCSwitch}
+                isDirectSave={!isMobile && hasConfiguredFolders && saveToPCSwitch}
                 onReset={handleReset}
               />
             )}
@@ -443,8 +431,8 @@ export default function App() {
           </>
         )}
 
-        {/* APARTADO 2: SECCIÓN DE RUTAS DE PC (SOLO ESCRITORIO LOCAL) */}
-        {isDesktopLocalMode && activeTab === 'settings' && (
+        {/* APARTADO 2: SECCIÓN DE RUTAS DE PC (DISPONIBLE EN TODAS LAS PC Y LAPTOPS) */}
+        {!isMobile && activeTab === 'settings' && (
           <SettingsSection
             mp3FolderPath={mp3FolderPath}
             setMp3FolderPath={setMp3FolderPath}
