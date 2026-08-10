@@ -15,6 +15,10 @@ const PORT = process.env.PORT || 5050;
 
 app.use(cors({
   origin(origin, callback) {
+    if (process.env.MC_MUSIC_DESKTOP === 'true') {
+      const isDesktopOrigin = !origin || /^http:\/\/127\.0\.0\.1:\d+$/.test(origin);
+      return callback(isDesktopOrigin ? null : new Error('Origen no permitido por CORS'), isDesktopOrigin);
+    }
     if (!origin || !process.env.ALLOWED_ORIGIN || origin === process.env.ALLOWED_ORIGIN) {
       return callback(null, true);
     }
@@ -102,18 +106,34 @@ app.get('*', (req, res, next) => {
   });
 });
 
-if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
-  app.listen(PORT, async () => {
-    console.log(`\n🎵 =========================================`);
-    console.log(`   Servidor MC-Music activo en puerto ${PORT}`);
-    console.log(`   URL API: http://localhost:${PORT}/api`);
-    console.log(`=========================================\n`);
+export function startServer(port = PORT, host = '0.0.0.0') {
+  return new Promise((resolve, reject) => {
+    const server = app.listen(port, host, async () => {
+      const address = server.address();
+      const activePort = typeof address === 'object' && address ? address.port : port;
+      console.log(`\n🎵 =========================================`);
+      console.log(`   Servidor MC-Music activo en puerto ${activePort}`);
+      console.log(`   URL API: http://${host === '0.0.0.0' ? 'localhost' : host}:${activePort}/api`);
+      console.log(`=========================================\n`);
 
-    try {
-      await ensureYtDlpBinary();
-    } catch (err) {
-      console.warn('[warning] No se pudo descargar yt-dlp automáticamente al iniciar:', err.message);
-    }
+      try {
+        await ensureYtDlpBinary();
+      } catch (err) {
+        console.warn('[warning] No se pudo descargar yt-dlp automáticamente al iniciar:', err.message);
+      }
+
+      resolve(server);
+    });
+
+    server.on('error', reject);
+  });
+}
+
+const isDirectExecution = process.argv[1] && path.resolve(process.argv[1]) === __filename;
+if (!process.env.VERCEL && isDirectExecution) {
+  startServer().catch((err) => {
+    console.error('[server] No se pudo iniciar el servidor:', err);
+    process.exitCode = 1;
   });
 }
 

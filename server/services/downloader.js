@@ -46,6 +46,20 @@ function getYoutubeRuntimeArgs() {
   ];
 }
 
+function getYtDlpProcessOptions(extraOptions = {}) {
+  if (!process.versions.electron) return extraOptions;
+
+  return {
+    ...extraOptions,
+    env: {
+      ...process.env,
+      // Permite que yt-dlp reutilice el ejecutable de Electron como runtime Node
+      // sin exigir que el cliente instale Node.js por separado.
+      ELECTRON_RUN_AS_NODE: '1'
+    }
+  };
+}
+
 function classifyDownloadError(stderr, exitCode) {
   const detail = String(stderr || '').toLowerCase();
 
@@ -262,7 +276,10 @@ export async function getVideoInfo(rawUrl) {
   ];
 
   return new Promise((resolve, reject) => {
-    execFile(ytDlpPath, args, { maxBuffer: 10 * 1024 * 1024, timeout: 30000 }, (error, stdout, stderr) => {
+    execFile(ytDlpPath, args, getYtDlpProcessOptions({
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: 30000
+    }), (error, stdout, stderr) => {
       if (error) {
         console.error('[downloader] Error en execFile yt-dlp info:', stderr || error.message);
         getOEmbedInfo(url)
@@ -368,7 +385,7 @@ export async function processDownload(req, res) {
   console.log(`[downloader] Descargando [${format.toUpperCase()}] para: "${info.title}"`);
   const startTime = Date.now();
 
-  const proc = spawn(ytDlpPath, args);
+  const proc = spawn(ytDlpPath, args, getYtDlpProcessOptions());
   let stderrOutput = '';
 
   proc.stderr.on('data', (data) => {
@@ -392,15 +409,15 @@ export async function processDownload(req, res) {
       return;
     }
 
-    let targetFolderPath = customPath && customPath.trim() ? customPath.trim() : '';
-    if (!targetFolderPath) {
-      const userHome = process.env.USERPROFILE || os.homedir() || 'C:\\';
-      targetFolderPath = path.join(userHome, format === 'mp4' ? 'Videos' : 'Music');
-    }
+    const targetFolderPath = customPath && customPath.trim() ? customPath.trim() : '';
 
     let savedToCustomFolder = null;
-    const folderCheck = validateAndPrepareFolder(targetFolderPath);
-    if (folderCheck.valid) {
+    if (targetFolderPath) {
+      const folderCheck = validateAndPrepareFolder(targetFolderPath);
+      if (!folderCheck.valid) {
+        fs.unlink(tempFilePath, () => {});
+        return res.status(400).json({ error: folderCheck.error });
+      }
       try {
         const destinationPath = path.join(folderCheck.path, fileName);
         fs.copyFileSync(tempFilePath, destinationPath);
@@ -412,6 +429,10 @@ export async function processDownload(req, res) {
     }
 
     if (directSaveOnly === 'true' || String(directSaveOnly) === '1') {
+      if (!savedToCustomFolder) {
+        fs.unlink(tempFilePath, () => {});
+        return res.status(400).json({ error: 'No se configuró una carpeta de destino válida.' });
+      }
       fs.unlink(tempFilePath, () => {});
       res.setHeader('Content-Type', 'application/json');
       return res.json({

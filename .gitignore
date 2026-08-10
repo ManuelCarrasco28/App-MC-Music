@@ -5,6 +5,7 @@ node_modules/
 # Production build output
 dist/
 build/
+release/
 
 # Binaries & Temporary Files
 bin/

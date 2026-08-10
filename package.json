@@ -3,8 +3,9 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "main": "electron/main.js",
   "engines": {
-    "node": "22.x"
+    "node": "22.x || 24.x"
   },
   "scripts": {
     "start": "node server/index.js",
@@ -12,7 +13,11 @@
     "client": "vite",
     "server": "node server/index.js",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "desktop": "electron electron/main.js",
+    "desktop:dev": "concurrently -k \"npm run server\" \"npm run client\" \"wait-on http-get://127.0.0.1:5050/api/health http://127.0.0.1:3000 && electron electron/main.js\"",
+    "desktop:pack": "npm run build && electron-builder --dir",
+    "desktop:build": "npm run build && electron-builder --win nsis"
   },
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
@@ -33,6 +38,39 @@
     "@types/react-dom": "^19.0.3",
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^9.1.2",
-    "vite": "^6.1.0"
+    "electron": "^43.3.0",
+    "electron-builder": "^26.15.3",
+    "vite": "^6.1.0",
+    "wait-on": "^9.1.0"
+  },
+  "build": {
+    "appId": "com.mcmusic.desktop",
+    "productName": "MC-Music",
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/@ffmpeg-installer/**/*"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "server/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "artifactName": "MC-Music-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "MC-Music"
+    }
   }
 }
