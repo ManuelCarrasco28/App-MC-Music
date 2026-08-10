@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { CheckCircle2, RefreshCw } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
-export default function DownloadProgress({ isDownloading, isCompleted, format, title, savedToPath, isDirectSave, onReset }) {
+export default function DownloadProgress({ isDownloading, isCompleted, format, quality, resolution, title, savedToPath, isDirectSave, onReset }) {
   useEffect(() => {
     if (isCompleted) {
       try {
@@ -55,7 +55,7 @@ export default function DownloadProgress({ isDownloading, isCompleted, format, t
           </div>
 
           <span style={{ fontSize: '0.85rem', color: 'var(--text-dim)' }}>
-            Descargando audio a máxima velocidad en alta calidad (320kbps).
+            Procesando {format === 'mp3' ? `audio MP3 a ${quality} kbps` : `video MP4 a ${resolution}p`}.
           </span>
         </>
       ) : isCompleted ? (

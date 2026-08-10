@@ -468,6 +468,8 @@ export default function App() {
                 isDownloading={isDownloading}
                 isCompleted={isCompleted}
                 format={format}
+                quality={quality}
+                resolution={resolution}
                 title={videoInfo?.title || ''}
                 savedToPath={lastSavedPath}
                 isDirectSave={!isMobile && hasConfiguredFolders && saveToPCSwitch}
@@ -532,7 +534,7 @@ export default function App() {
       </main>
 
       <footer className="app-footer">
-        <p>MC-Music © {new Date().getFullYear()} • Descargas directas de YouTube en MP3/MP4</p>
+        <p>Manuel Carrasco © {new Date().getFullYear()} • Descargas directas de YouTube en MP3/MP4</p>
       </footer>
     </div>
   );

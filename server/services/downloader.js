@@ -362,20 +362,20 @@ export async function processDownload(req, res) {
   ];
 
   if (format === 'mp3') {
-    let audioBitrateQuality = '0';
-    if (quality === '256') audioBitrateQuality = '2';
-    if (quality === '128') audioBitrateQuality = '5';
+    const audioBitrate = ['320', '256', '128'].includes(String(quality))
+      ? String(quality)
+      : '320';
 
     args.push(
       '-f', 'bestaudio[ext=m4a]/bestaudio/best',
       '-x',
       '--audio-format', 'mp3',
-      '--audio-quality', audioBitrateQuality
+      '--audio-quality', `${audioBitrate}K`
     );
   } else {
     const resLimit = parseInt(resolution, 10) || 720;
     args.push(
-      '-f', `bestvideo[height<=${resLimit}][ext=mp4]+bestaudio[ext=m4a]/best[height<=${resLimit}][ext=mp4]/best`,
+      '-f', `bestvideo[height=${resLimit}]+bestaudio/best[height=${resLimit}]/bestvideo[height<=${resLimit}]+bestaudio/best[height<=${resLimit}]`,
       '--merge-output-format', 'mp4'
     );
   }
