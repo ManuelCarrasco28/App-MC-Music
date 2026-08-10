@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+.pnpm-store
+
+# Production build output
+dist/
+build/
+
+# Binaries & Temporary Files
+bin/
+scratch/
+tmp/
+*.log
+
+# Environment variables & Local config
+.env
+.env.local
+.env.development.local
+.env.production.local
+
+# OS generated files
+.DS_Store
+Thumbs.db
