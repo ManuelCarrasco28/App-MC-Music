@@ -45,6 +45,29 @@ function getYoutubeRuntimeArgs() {
   ];
 }
 
+async function getPublicPageStats(url) {
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36',
+      'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8'
+    },
+    signal: AbortSignal.timeout(10000)
+  });
+
+  if (!response.ok) {
+    throw new Error(`La página de YouTube respondió con estado ${response.status}`);
+  }
+
+  const html = await response.text();
+  const durationMatch = html.match(/"lengthSeconds":"(\d+)"/);
+  const viewsMatch = html.match(/"viewCount":"(\d+)"/);
+
+  return {
+    duration: durationMatch ? Number(durationMatch[1]) : 0,
+    views: viewsMatch ? Number(viewsMatch[1]) : 0
+  };
+}
+
 async function getOEmbedInfo(url) {
   const videoId = new URL(url).searchParams.get('v');
   const endpoint = new URL('https://www.youtube.com/oembed');
@@ -61,15 +84,23 @@ async function getOEmbedInfo(url) {
   }
 
   const info = await response.json();
+  let stats = { duration: 0, views: 0 };
+
+  try {
+    stats = await getPublicPageStats(url);
+  } catch (statsError) {
+    console.warn('[downloader] No se pudieron completar duración y vistas:', statsError.message);
+  }
+
   return {
     id: videoId,
     url,
     title: info.title || 'Desconocido',
     author: info.author_name || 'Canal desconocido',
-    duration: 0,
-    durationFormatted: '--:--',
+    duration: stats.duration,
+    durationFormatted: stats.duration ? formatDuration(stats.duration) : '--:--',
     thumbnail: info.thumbnail_url || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-    views: '--',
+    views: stats.views ? stats.views.toLocaleString('es-ES') : '--',
     audioQualities: ['320', '256', '128'],
     videoResolutions: ['1080', '720', '480', '360'],
     metadataSource: 'oembed'
