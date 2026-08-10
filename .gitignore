@@ -6,6 +6,7 @@ node_modules/
 dist/
 build/
 release/
+MC-Music-Setup-*.exe
 
 # Binaries & Temporary Files
 bin/
