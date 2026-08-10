@@ -153,29 +153,33 @@ async function getOEmbedInfo(url) {
   endpoint.searchParams.set('url', url);
   endpoint.searchParams.set('format', 'json');
 
-  const response = await fetch(endpoint, {
-    headers: { 'User-Agent': 'MC-Music/1.0' },
-    signal: AbortSignal.timeout(10000)
-  });
+  const [response, fallbackViews] = await Promise.all([
+    fetch(endpoint, {
+      headers: { 'User-Agent': 'MC-Music/1.0' },
+      signal: AbortSignal.timeout(10000)
+    }),
+    getPublicViewCount(videoId).catch(() => 0)
+  ]);
 
   if (!response.ok) {
     throw new Error(`YouTube oEmbed respondió con estado ${response.status}`);
   }
 
   const info = await response.json();
-  let stats = { duration: 0, views: 0 };
+  let stats = { duration: 0, views: fallbackViews };
 
-  try {
-    stats = await getPublicPageStats(url);
-  } catch (statsError) {
-    console.warn('[downloader] No se pudieron completar duración y vistas:', statsError.message);
-  }
-
-  if (!stats.views) {
+  // Las IP serverless de Vercel son bloqueadas por los endpoints de reproducción
+  // de YouTube. En producción respondemos de inmediato con oEmbed + vistas y
+  // dejamos que el navegador del cliente calcule la duración en paralelo.
+  if (!process.env.VERCEL) {
     try {
-      stats.views = await getPublicViewCount(videoId);
-    } catch (viewsError) {
-      console.warn('[downloader] No se pudo completar el contador de vistas:', viewsError.message);
+      const pageStats = await getPublicPageStats(url);
+      stats = {
+        duration: pageStats.duration || 0,
+        views: pageStats.views || stats.views
+      };
+    } catch (statsError) {
+      console.warn('[downloader] No se pudieron completar duración y vistas:', statsError.message);
     }
   }
 

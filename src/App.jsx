@@ -85,6 +85,12 @@ export default function App() {
   });
 
   useEffect(() => {
+    loadYoutubeIframeApi().catch((apiError) => {
+      console.warn('No se pudo precargar YouTube Player API:', apiError.message);
+    });
+  }, []);
+
+  useEffect(() => {
     const handleResize = () => {
       const mobileCheck = window.innerWidth <= 768 || /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
       setIsMobile(mobileCheck);
@@ -176,6 +182,11 @@ export default function App() {
     setVideoInfo(null);
     setIsCompleted(false);
 
+    const requestedVideoId = inputUrl.match(/(?:v=|youtu\.be\/|shorts\/)([a-zA-Z0-9_-]{11})/)?.[1];
+    const durationPromise = requestedVideoId
+      ? getBrowserVideoDuration(requestedVideoId).catch(() => 0)
+      : null;
+
     try {
       const response = await fetch('/api/info', {
         method: 'POST',
@@ -191,7 +202,7 @@ export default function App() {
 
       setVideoInfo(data);
       if (!data.duration && data.id) {
-        getBrowserVideoDuration(data.id)
+        (durationPromise || getBrowserVideoDuration(data.id))
           .then((duration) => {
             if (!duration) return;
             setVideoInfo((current) => current?.id === data.id
