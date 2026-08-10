@@ -43,14 +43,13 @@ export default function UrlForm({ url, setUrl, onSubmit, onClear, isLoading }) {
           {url.trim() && (
             <motion.button
               type="button"
-              className="btn-icon-action"
+              className="btn-icon-action url-action-button"
               onClick={onClear}
               disabled={isLoading}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               title="Limpiar enlace"
               aria-label="Limpiar enlace"
-              style={{ padding: '0.4rem 0.65rem', fontSize: '0.78rem' }}
             >
               <X size={14} />
               <span>Limpiar</span>
@@ -58,13 +57,12 @@ export default function UrlForm({ url, setUrl, onSubmit, onClear, isLoading }) {
           )}
           <motion.button
             type="button"
-            className="btn-icon-action"
+            className="btn-icon-action url-action-button"
             onClick={handlePaste}
             disabled={isLoading}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             title="Pegar desde el portapapeles"
-            style={{ padding: '0.4rem 0.65rem', fontSize: '0.78rem' }}
           >
             <Clipboard size={13} />
             <span>Pegar</span>

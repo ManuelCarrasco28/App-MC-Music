@@ -190,6 +190,7 @@ body {
   position: relative;
   display: flex;
   align-items: center;
+  min-width: 0;
 }
 
 .input-icon {
@@ -201,7 +202,8 @@ body {
 
 .url-input {
   width: 100%;
-  padding: 1rem 7.5rem 1rem 3rem;
+  min-width: 0;
+  padding: 1rem 11.5rem 1rem 3rem;
   background: rgba(10, 14, 26, 0.8);
   border: 1.5px solid var(--border-color);
   border-radius: var(--radius-md);
@@ -209,6 +211,9 @@ body {
   font-size: 0.95rem;
   font-family: var(--font-body);
   outline: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   transition: all var(--transition-smooth);
 }
 
@@ -223,6 +228,13 @@ body {
   display: flex;
   align-items: center;
   gap: 0.4rem;
+  z-index: 2;
+  flex-shrink: 0;
+}
+
+.url-action-button {
+  padding: 0.4rem 0.65rem;
+  font-size: 0.78rem;
 }
 
 .btn-icon-action {
@@ -644,8 +656,17 @@ body {
     max-height: 200px;
   }
   .url-input {
-    padding-right: 5.5rem;
+    padding-right: 6.7rem;
     font-size: 0.85rem;
+  }
+  .input-actions .url-action-button {
+    width: 2.35rem;
+    height: 2.15rem;
+    padding: 0;
+    justify-content: center;
+  }
+  .input-actions .url-action-button span {
+    display: none;
   }
   .quality-grid {
     grid-template-columns: repeat(auto-fit, minmax(95px, 1fr));
