@@ -2,7 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Music, HardDrive, Download } from 'lucide-react';
 
-export default function Header({ activeTab, setActiveTab, isMobile }) {
+export default function Header({ activeTab, setActiveTab, showDesktopSettings }) {
   return (
     <header className="app-header glass-panel">
       <motion.div 
@@ -19,8 +19,8 @@ export default function Header({ activeTab, setActiveTab, isMobile }) {
         </div>
       </motion.div>
 
-      {/* Navegación por pestañas: En móviles se oculta la opción 'Carpeta en PC' */}
-      {!isMobile && (
+      {/* Navegación por pestañas: La pestaña 'Carpeta en PC' solo se muestra al ejecutar la app localmente en una PC */}
+      {showDesktopSettings && (
         <nav style={{ display: 'flex', gap: '0.4rem', background: 'rgba(10, 14, 26, 0.6)', padding: '4px', borderRadius: '30px', border: '1px solid var(--border-color)' }}>
           <button
             type="button"
