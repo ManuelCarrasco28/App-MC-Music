@@ -13,11 +13,23 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 5050;
 
-app.use(cors());
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || !process.env.ALLOWED_ORIGIN || origin === process.env.ALLOWED_ORIGIN) {
+      return callback(null, true);
+    }
+    return callback(new Error('Origen no permitido por CORS'));
+  }
+}));
 app.use(express.json());
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', service: 'MC-Music API', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    service: 'MC-Music API',
+    runtime: process.env.VERCEL ? 'serverless' : 'local',
+    timestamp: new Date().toISOString()
+  });
 });
 
 app.post('/api/info', async (req, res) => {

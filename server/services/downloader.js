@@ -35,9 +35,57 @@ function sanitizeFilename(title) {
     .trim();
 }
 
+function getYoutubeRuntimeArgs() {
+  return [
+    '--js-runtimes', `node:${process.execPath}`,
+    '--remote-components', 'ejs:github',
+    '--force-ipv4',
+    '--retries', '3',
+    '--fragment-retries', '3'
+  ];
+}
+
+async function getOEmbedInfo(url) {
+  const videoId = new URL(url).searchParams.get('v');
+  const endpoint = new URL('https://www.youtube.com/oembed');
+  endpoint.searchParams.set('url', url);
+  endpoint.searchParams.set('format', 'json');
+
+  const response = await fetch(endpoint, {
+    headers: { 'User-Agent': 'MC-Music/1.0' },
+    signal: AbortSignal.timeout(10000)
+  });
+
+  if (!response.ok) {
+    throw new Error(`YouTube oEmbed respondió con estado ${response.status}`);
+  }
+
+  const info = await response.json();
+  return {
+    id: videoId,
+    url,
+    title: info.title || 'Desconocido',
+    author: info.author_name || 'Canal desconocido',
+    duration: 0,
+    durationFormatted: '--:--',
+    thumbnail: info.thumbnail_url || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+    views: '--',
+    audioQualities: ['320', '256', '128'],
+    videoResolutions: ['1080', '720', '480', '360'],
+    metadataSource: 'oembed'
+  };
+}
+
 export async function getVideoInfo(rawUrl) {
-  await ensureYtDlpBinary();
   const url = normalizeYoutubeUrl(rawUrl);
+
+  try {
+    await ensureYtDlpBinary();
+  } catch (binaryError) {
+    console.error('[downloader] No se pudo preparar yt-dlp:', binaryError.message);
+    return getOEmbedInfo(url);
+  }
+
   const ytDlpPath = getYtDlpPath();
 
   const args = [
@@ -46,6 +94,7 @@ export async function getVideoInfo(rawUrl) {
     '--no-call-home',
     '--skip-download',
     '--no-playlist',
+    ...getYoutubeRuntimeArgs(),
     url
   ];
 
@@ -53,7 +102,13 @@ export async function getVideoInfo(rawUrl) {
     execFile(ytDlpPath, args, { maxBuffer: 10 * 1024 * 1024, timeout: 30000 }, (error, stdout, stderr) => {
       if (error) {
         console.error('[downloader] Error en execFile yt-dlp info:', stderr || error.message);
-        return reject(new Error('No se pudo procesar la información del video de YouTube. Verifica el enlace.'));
+        getOEmbedInfo(url)
+          .then(resolve)
+          .catch((fallbackError) => {
+            console.error('[downloader] También falló el respaldo oEmbed:', fallbackError.message);
+            reject(new Error('YouTube rechazó temporalmente la consulta. Inténtalo nuevamente en unos minutos.'));
+          });
+        return;
       }
 
       try {
@@ -120,6 +175,7 @@ export async function processDownload(req, res) {
   const args = [
     '--no-warnings',
     '--no-call-home',
+    ...getYoutubeRuntimeArgs(),
     '--ffmpeg-location', ffmpegPath,
     '--concurrent-fragments', '5',
     '-o', tempFilePath
@@ -233,7 +289,7 @@ export async function processDownload(req, res) {
     }
   });
 
-  req.on('close', () => {
+  const cancelDownload = () => {
     if (proc && !proc.killed) {
       console.log('[downloader] Petición cancelada por el cliente.');
       proc.kill('SIGTERM');
@@ -241,5 +297,10 @@ export async function processDownload(req, res) {
         fs.unlink(tempFilePath, () => {});
       }
     }
+  };
+
+  req.on('aborted', cancelDownload);
+  res.on('close', () => {
+    if (!res.writableEnded) cancelDownload();
   });
 }
