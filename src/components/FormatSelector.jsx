@@ -2,6 +2,46 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Music, Video, Download, Check } from 'lucide-react';
 
+function normalizeVideoResolutions(videoInfo) {
+  const values = Array.isArray(videoInfo?.videoResolutions) ? videoInfo.videoResolutions : [];
+  const normalized = values
+    .map((value) => {
+      if (value && typeof value === 'object') {
+        const height = Number(value.height ?? value.id);
+        if (!Number.isFinite(height) || height <= 0) return null;
+        return {
+          id: String(height),
+          label: value.label || `${height}p`,
+          description: value.description || ''
+        };
+      }
+
+      const match = String(value ?? '').match(/(\d{3,4})/);
+      if (!match) return null;
+      const height = Number(match[1]);
+      return { id: String(height), label: `${height}p`, description: '' };
+    })
+    .filter(Boolean);
+
+  const unique = new Map(normalized.map((item) => [item.id, item]));
+  return [...unique.values()].sort((a, b) => Number(b.id) - Number(a.id));
+}
+
+function getResolutionLabel(resolution) {
+  const labels = {
+    2160: '4K Ultra HD',
+    1440: '2K QHD',
+    1080: 'Full HD',
+    720: 'HD (Compatible con todos los móviles)',
+    480: 'SD',
+    360: 'Ahorro de datos',
+    240: 'Baja resolución'
+  };
+  return labels[resolution]
+    ? `${resolution}p · ${labels[resolution]}`
+    : `${resolution}p · Calidad disponible`;
+}
+
 export default function FormatSelector({
   videoInfo,
   format,
@@ -13,92 +53,57 @@ export default function FormatSelector({
   onStartDownload,
   isDownloading
 }) {
-  // Lista dinámica de resoluciones de video extraídas directamente de YouTube
-  const availableResolutions = (videoInfo && videoInfo.videoResolutions && videoInfo.videoResolutions.length > 0)
-    ? videoInfo.videoResolutions
-    : ['1080', '720', '480', '360'];
+  const extractedResolutions = normalizeVideoResolutions(videoInfo);
+  const availableResolutions = extractedResolutions.length > 0
+    ? extractedResolutions
+    : [{ id: 'best', label: 'Original', description: 'Mejor calidad disponible en el enlace' }];
 
-  const getResolutionLabel = (res) => {
-    if (res === '2160') return '(4K Ultra HD - Máxima Calidad)';
-    if (res === '1440') return '(2K QHD - Alta Calidad)';
-    if (res === '1080') return '(1080p Full HD - Mejor Definición)';
-    if (res === '720') return '(720p HD - Recomendado)';
-    if (res === '480') return '(480p SD - Calidad Estándar)';
-    if (res === '360') return '(360p - Ahorro de Datos)';
-    if (res === '240') return '(240p - Baja Calidad)';
-    return `(${res}p - Calidad Estándar)`;
-  };
+  const availableAudioQualities = (Array.isArray(videoInfo?.audioQualities)
+    ? videoInfo.audioQualities
+    : ['320', '256', '128'])
+    .map(String)
+    .filter((value) => ['320', '256', '192', '160', '128'].includes(value));
+
+  const audioOptions = [
+    { id: '320', title: '320 kbps', desc: 'Máxima calidad de salida' },
+    { id: '256', title: '256 kbps', desc: 'Alta calidad' },
+    { id: '192', title: '192 kbps', desc: 'Calidad equilibrada' },
+    { id: '160', title: '160 kbps', desc: 'Tamaño moderado' },
+    { id: '128', title: '128 kbps', desc: 'Tamaño reducido' }
+  ].filter((item) => availableAudioQualities.includes(item.id));
 
   return (
-    <motion.div 
+    <motion.div
       className="format-card glass-panel"
       initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: 0.15 }}
     >
-      {/* Pestañas de formato (MP3 vs MP4) */}
       <div className="format-tabs">
         <button
           type="button"
           className={`format-tab ${format === 'mp3' ? 'active' : ''}`}
           onClick={() => setFormat('mp3')}
-          style={{ position: 'relative' }}
         >
           <Music size={18} />
           <span>Música (MP3)</span>
-          {format === 'mp3' && (
-            <motion.div
-              layoutId="format-tab-glow"
-              style={{
-                position: 'absolute',
-                inset: 0,
-                borderRadius: 'var(--radius-sm)',
-                background: 'linear-gradient(135deg, rgba(0, 242, 254, 0.2), rgba(121, 40, 202, 0.3))',
-                border: '1px solid var(--border-glow)',
-                zIndex: -1
-              }}
-              transition={{ type: "spring", stiffness: 400, damping: 30 }}
-            />
-          )}
         </button>
 
         <button
           type="button"
           className={`format-tab ${format === 'mp4' ? 'active' : ''}`}
           onClick={() => setFormat('mp4')}
-          style={{ position: 'relative' }}
         >
           <Video size={18} />
           <span>Video (MP4)</span>
-          {format === 'mp4' && (
-            <motion.div
-              layoutId="format-tab-glow"
-              style={{
-                position: 'absolute',
-                inset: 0,
-                borderRadius: 'var(--radius-sm)',
-                background: 'linear-gradient(135deg, rgba(0, 242, 254, 0.2), rgba(121, 40, 202, 0.3))',
-                border: '1px solid var(--border-glow)',
-                zIndex: -1
-              }}
-              transition={{ type: "spring", stiffness: 400, damping: 30 }}
-            />
-          )}
         </button>
       </div>
 
-      {/* Calidad de Audio MP3 */}
       {format === 'mp3' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-          <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-            Selecciona la calidad de audio:
-          </span>
+        <div className="quality-section">
+          <span className="quality-heading">Selecciona el bitrate de salida MP3:</span>
           <div className="quality-grid">
-            {[
-              { id: '320', title: '320 kbps', desc: '(Máxima Calidad HQ Audio)' },
-              { id: '256', title: '256 kbps', desc: '(Alta Calidad)' },
-              { id: '128', title: '128 kbps', desc: '(Tamaño Reducido)' }
-            ].map((item) => (
+            {audioOptions.map((item) => (
               <motion.button
                 key={item.id}
                 type="button"
@@ -107,45 +112,46 @@ export default function FormatSelector({
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
               >
-                <div className="quality-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem' }}>
-                  {quality === item.id && <Check size={14} style={{ color: 'var(--accent-cyan)' }} />}
+                <div className="quality-title">
+                  {quality === item.id && <Check size={14} className="quality-check" />}
                   <span>{item.title}</span>
                 </div>
                 <div className="quality-desc">{item.desc}</div>
               </motion.button>
             ))}
           </div>
+          <small className="quality-note">
+            Se conserva el audio original y se convierte al bitrate elegido. Convertir a 320 kbps no aumenta una fuente de menor calidad.
+          </small>
         </div>
       )}
 
-      {/* Resolución de Video MP4 (Extraídas en tiempo real del video de YouTube) */}
       {format === 'mp4' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-          <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-            Selecciona la resolución disponible de este video:
-          </span>
+        <div className="quality-section">
+          <span className="quality-heading">Calidades detectadas en el enlace:</span>
           <div className="quality-grid">
-            {availableResolutions.map((res) => (
+            {availableResolutions.map((option) => (
               <motion.button
-                key={res}
+                key={option.id}
                 type="button"
-                className={`quality-option ${resolution === res ? 'selected' : ''}`}
-                onClick={() => setResolution(res)}
+                className={`quality-option ${String(resolution) === option.id ? 'selected' : ''}`}
+                onClick={() => setResolution(option.id)}
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
               >
-                <div className="quality-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem' }}>
-                  {resolution === res && <Check size={14} style={{ color: '#c084fc' }} />}
-                  <span>{res}p</span>
+                <div className="quality-title">
+                  {String(resolution) === option.id && <Check size={14} className="quality-check video" />}
+                  <span>{option.label}</span>
                 </div>
-                <div className="quality-desc">{getResolutionLabel(res)}</div>
+                <div className="quality-desc">
+                  {option.description || getResolutionLabel(option.id)}
+                </div>
               </motion.button>
             ))}
           </div>
         </div>
       )}
 
-      {/* Botón Principal de Descarga */}
       <motion.button
         type="button"
         className="btn-primary"
@@ -157,7 +163,9 @@ export default function FormatSelector({
       >
         <Download size={20} />
         <span>
-          Descargar {format.toUpperCase()} ({format === 'mp3' ? `${quality}kbps` : `${resolution}p`})
+          Descargar {format.toUpperCase()} ({format === 'mp3'
+            ? `${quality} kbps`
+            : resolution === 'best' ? 'calidad original' : `${resolution}p`})
         </span>
       </motion.button>
     </motion.div>

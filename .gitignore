@@ -5,11 +5,13 @@ node_modules/
 # Production build output
 dist/
 build/
+build_win/
 release/
 MC-Music-Setup-*.exe
 
-# Binaries & Temporary Files
-bin/
+# Downloaded Binaries & Temporary Files
+bin/ffmpeg*
+bin/yt-dlp*
 scratch/
 tmp/
 *.log
@@ -23,3 +25,19 @@ tmp/
 # OS generated files
 .DS_Store
 Thumbs.db
+
+# Android / Capacitor generated files
+android/.gradle/
+android/.idea/
+android/build/
+android/app/build/
+android/capacitor-cordova-android-plugins/build/
+android/local.properties
+android/keystore.properties
+android/*.keystore
+android/*.jks
+
+# Installers (keep directory structure for releases)
+Instaladores/**/*.exe
+Instaladores/**/*.apk
+!Instaladores/**/.gitkeep

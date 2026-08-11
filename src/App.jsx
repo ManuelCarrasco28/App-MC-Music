@@ -7,6 +7,8 @@ import DownloadProgress from './components/DownloadProgress';
 import HistoryList from './components/HistoryList';
 import SettingsSection from './components/SettingsSection';
 import { AlertCircle, Music2, ShieldCheck, Zap, HardDrive, Download } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
+import { getMobileApiOrigin, mobileGetVideoInfo, mobileProcessDownload } from './utils/mobileExtractor';
 
 let youtubeIframeApiPromise;
 
@@ -75,34 +77,22 @@ async function getBrowserVideoDuration(videoId) {
   });
 }
 
+function buildApiUrl(pathname, isNativeMobile) {
+  return isNativeMobile ? `${getMobileApiOrigin()}${pathname}` : pathname;
+}
+
+async function readErrorResponse(response, fallbackMessage) {
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    const payload = await response.json().catch(() => null);
+    return payload?.error || fallbackMessage;
+  }
+  return fallbackMessage;
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('downloader'); // 'downloader' | 'settings'
-
-  // Detección estricta de teléfonos móviles: En PC y Laptops se muestra el diseño completo con historial y configuración de carpetas
-  const [isMobile, setIsMobile] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return window.innerWidth <= 768 || /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  });
-
-  useEffect(() => {
-    loadYoutubeIframeApi().catch((apiError) => {
-      console.warn('No se pudo precargar YouTube Player API:', apiError.message);
-    });
-  }, []);
-
-  useEffect(() => {
-    const handleResize = () => {
-      const mobileCheck = window.innerWidth <= 768 || /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-      setIsMobile(mobileCheck);
-
-      if (mobileCheck && activeTab === 'settings') {
-        setActiveTab('downloader');
-      }
-    };
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [activeTab]);
+  const isNativeMobile = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
 
   const [url, setUrl] = useState('');
   const [videoInfo, setVideoInfo] = useState(null);
@@ -116,9 +106,14 @@ export default function App() {
   const [isDownloading, setIsDownloading] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
+  const [downloadStage, setDownloadStage] = useState('preparing');
   const [lastSavedPath, setLastSavedPath] = useState('');
+  const [serverStatus, setServerStatus] = useState('checking');
   const downloadAbortControllerRef = useRef(null);
   const activeDownloadJobIdRef = useRef('');
+  const progressSourceRef = useRef(null);
+  const infoAbortControllerRef = useRef(null);
+  const infoRequestIdRef = useRef(0);
 
   // Rutas separadas para MP3 y MP4
   const [mp3FolderPath, setMp3FolderPath] = useState(() => {
@@ -134,7 +129,7 @@ export default function App() {
   });
 
   // Determinar si el usuario ya configuró AMBAS carpetas en su PC (MP3 y MP4)
-  const hasConfiguredFolders = Boolean(!isMobile && mp3FolderPath && mp3FolderPath.trim() && mp4FolderPath && mp4FolderPath.trim());
+  const hasConfiguredFolders = Boolean(!isNativeMobile && mp3FolderPath && mp3FolderPath.trim() && mp4FolderPath && mp4FolderPath.trim());
 
   // Activador de Modo de Descarga (disponible en PC y Laptops)
   const [saveToPCSwitch, setSaveToPCSwitch] = useState(() => {
@@ -179,48 +174,116 @@ export default function App() {
     }
   }, [history]);
 
+  useEffect(() => {
+    if (isNativeMobile) {
+      setServerStatus('online');
+      return;
+    }
+
+    let disposed = false;
+    let activeController = null;
+    let healthRequestId = 0;
+
+    const checkService = async (showChecking = false) => {
+      const requestId = ++healthRequestId;
+      activeController?.abort();
+      const controller = new AbortController();
+      activeController = controller;
+      if (showChecking) setServerStatus('checking');
+      const timeoutTimer = globalThis.setTimeout(() => controller.abort(), 10_000);
+
+      try {
+        const response = await fetch(buildApiUrl('/api/health', false), {
+          signal: controller.signal,
+          cache: 'no-store'
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (!disposed && requestId === healthRequestId) setServerStatus('online');
+      } catch {
+        if (!disposed && requestId === healthRequestId) setServerStatus('offline');
+      } finally {
+        globalThis.clearTimeout(timeoutTimer);
+      }
+    };
+
+    checkService(true);
+    const intervalId = globalThis.setInterval(() => checkService(false), 60_000);
+    return () => {
+      disposed = true;
+      globalThis.clearInterval(intervalId);
+      activeController?.abort();
+    };
+  }, [isNativeMobile]);
+
+  useEffect(() => () => {
+    infoAbortControllerRef.current?.abort();
+    downloadAbortControllerRef.current?.abort();
+    progressSourceRef.current?.close();
+  }, []);
+
   const handleFetchInfo = async (inputUrl) => {
+    infoAbortControllerRef.current?.abort();
+    const requestController = new AbortController();
+    const requestId = ++infoRequestIdRef.current;
+    infoAbortControllerRef.current = requestController;
+
     setError(null);
     setLoadingInfo(true);
     setVideoInfo(null);
     setIsCompleted(false);
 
-    const requestedVideoId = inputUrl.match(/(?:v=|youtu\.be\/|shorts\/)([a-zA-Z0-9_-]{11})/)?.[1];
-    const durationPromise = requestedVideoId
-      ? getBrowserVideoDuration(requestedVideoId).catch(() => 0)
-      : null;
-
     try {
-      const response = await fetch('/api/info', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: inputUrl })
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Ocurrió un error al procesar el enlace.');
+      let data;
+      if (isNativeMobile) {
+        setServerStatus((current) => current === 'online' ? current : 'waking');
+        data = await mobileGetVideoInfo(inputUrl, { signal: requestController.signal });
+      } else {
+        const response = await fetch(buildApiUrl('/api/info', false), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: inputUrl }),
+          signal: requestController.signal
+        });
+        if (!response.ok) {
+          throw new Error(await readErrorResponse(response, 'No se pudo analizar el enlace.'));
+        }
+        data = await response.json();
       }
 
+      if (requestId !== infoRequestIdRef.current) return;
+      setServerStatus('online');
       setVideoInfo(data);
-      if (!data.duration && data.id) {
-        (durationPromise || getBrowserVideoDuration(data.id))
+
+      const firstResolution = Array.isArray(data.videoResolutions)
+        ? data.videoResolutions
+          .map((value) => String(value?.height ?? value?.id ?? value).match(/\d{3,4}/)?.[0])
+          .find(Boolean)
+        : null;
+      setResolution(firstResolution || 'best');
+
+      if (Array.isArray(data.audioQualities) && data.audioQualities.length > 0) {
+        const normalizedQualities = data.audioQualities.map(String);
+        setQuality((current) => normalizedQualities.includes(current) ? current : normalizedQualities[0]);
+      }
+
+      if (data.platform === 'youtube' && !data.duration && data.id) {
+        getBrowserVideoDuration(data.id)
           .then((duration) => {
-            if (!duration) return;
+            if (!duration || requestId !== infoRequestIdRef.current) return;
             setVideoInfo((current) => current?.id === data.id
               ? { ...current, duration, durationFormatted: formatVideoDuration(duration) }
               : current);
           })
           .catch((durationError) => console.warn('No se pudo calcular la duración:', durationError.message));
       }
-      if (data.videoResolutions && data.videoResolutions.length > 0) {
-        setResolution(data.videoResolutions[0]);
-      }
     } catch (err) {
-      setError(err.message || 'Error de conexión con el servidor.');
+      if (requestId !== infoRequestIdRef.current || err.name === 'AbortError') return;
+      setError(err.message || 'No se pudo conectar con el servicio de descarga.');
     } finally {
-      setLoadingInfo(false);
+      if (requestId === infoRequestIdRef.current) {
+        setLoadingInfo(false);
+        infoAbortControllerRef.current = null;
+      }
     }
   };
 
@@ -230,16 +293,58 @@ export default function App() {
     setIsDownloading(true);
     setIsCompleted(false);
     setDownloadProgress(0);
+    setDownloadStage('preparing');
     setError(null);
     setLastSavedPath('');
 
     const selectedFolderPath = format === 'mp3' ? mp3FolderPath : mp4FolderPath;
-    const isDirectSaveToPC = !isMobile && hasConfiguredFolders && saveToPCSwitch;
+    const isDirectSaveToPC = !isNativeMobile && hasConfiguredFolders && saveToPCSwitch;
+    const downloadController = new AbortController();
+    downloadAbortControllerRef.current = downloadController;
+
+    if (isNativeMobile) {
+      try {
+        const result = await mobileProcessDownload({
+          videoInfo,
+          format,
+          quality,
+          resolution,
+          signal: downloadController.signal,
+          onProgress: (progress) => setDownloadProgress(Math.min(100, Math.max(0, Number(progress) || 0))),
+          onStage: setDownloadStage
+        });
+        setIsDownloading(false);
+        setIsCompleted(true);
+        setDownloadProgress(100);
+        setLastSavedPath(result?.savedPathDisplay || 'Descargas del teléfono');
+
+        const newHistoryItem = {
+          title: videoInfo.title,
+          author: videoInfo.author,
+          url: videoInfo.url,
+          format: format.toUpperCase(),
+          quality: format === 'mp3' ? `${quality} kbps` : resolution === 'best' ? 'Original' : `${resolution}p`,
+          savedToPath: 'Descargas del teléfono',
+          date: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+        };
+        setHistory((prev) => [newHistoryItem, ...prev.filter(h => h.url !== videoInfo.url)].slice(0, 8));
+        return;
+      } catch (mobileError) {
+        setIsDownloading(false);
+        setIsCompleted(false);
+        setError(mobileError.name === 'AbortError'
+          ? 'Descarga cancelada.'
+          : (mobileError.message || 'No se pudo completar la descarga móvil.'));
+      } finally {
+        if (downloadAbortControllerRef.current === downloadController) {
+          downloadAbortControllerRef.current = null;
+        }
+      }
+      return;
+    }
 
     const jobId = globalThis.crypto?.randomUUID?.()
       || `${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    const downloadController = new AbortController();
-    downloadAbortControllerRef.current = downloadController;
     activeDownloadJobIdRef.current = jobId;
     const downloadParams = new URLSearchParams({
       url: videoInfo.url,
@@ -256,9 +361,12 @@ export default function App() {
 
     const downloadUrl = `/api/download?${downloadParams.toString()}`;
     const progressSource = new EventSource(`/api/progress/${encodeURIComponent(jobId)}`);
+    progressSourceRef.current = progressSource;
     progressSource.onmessage = (event) => {
       try {
         const progressEvent = JSON.parse(event.data);
+        if (progressEvent.stage) setDownloadStage(progressEvent.stage);
+        if (progressEvent.error) setError(progressEvent.error);
         if (Number.isFinite(Number(progressEvent.progress))) {
           setDownloadProgress(Math.min(100, Math.max(0, Number(progressEvent.progress))));
         }
@@ -296,7 +404,7 @@ export default function App() {
           author: videoInfo.author,
           url: videoInfo.url,
           format: format.toUpperCase(),
-          quality: format === 'mp3' ? `${quality}kbps` : `${resolution}p`,
+          quality: format === 'mp3' ? `${quality} kbps` : resolution === 'best' ? 'Original' : `${resolution}p`,
           savedToPath: savedPathResult,
           date: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
         };
@@ -306,9 +414,7 @@ export default function App() {
         // Modo Descarga Normal (PC, Laptops o Teléfonos Móviles)
         const res = await fetch(downloadUrl, { signal: downloadController.signal });
 
-        if (!res.ok) {
-          throw new Error('Error al procesar la conversión del video.');
-        }
+        if (!res.ok) throw new Error(await readErrorResponse(res, 'Error al procesar la conversión del contenido.'));
 
         const blob = await res.blob();
         const fileExt = format === 'mp4' ? 'mp4' : 'mp3';
@@ -334,7 +440,7 @@ export default function App() {
           author: videoInfo.author,
           url: videoInfo.url,
           format: format.toUpperCase(),
-          quality: format === 'mp3' ? `${quality}kbps` : `${resolution}p`,
+          quality: format === 'mp3' ? `${quality} kbps` : resolution === 'best' ? 'Original' : `${resolution}p`,
           savedToPath: 'Descarga del navegador',
           date: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
         };
@@ -350,6 +456,7 @@ export default function App() {
       setIsDownloading(false);
     } finally {
       progressSource.close();
+      if (progressSourceRef.current === progressSource) progressSourceRef.current = null;
       if (downloadAbortControllerRef.current === downloadController) {
         downloadAbortControllerRef.current = null;
         activeDownloadJobIdRef.current = '';
@@ -361,21 +468,30 @@ export default function App() {
     if (!isDownloading) return;
     const activeJobId = activeDownloadJobIdRef.current;
     if (activeJobId) {
-      fetch(`/api/download/cancel/${encodeURIComponent(activeJobId)}`, { method: 'POST' })
+      fetch(buildApiUrl(`/api/download/cancel/${encodeURIComponent(activeJobId)}`, isNativeMobile), { method: 'POST' })
         .catch((cancelError) => console.warn('No se pudo notificar la cancelación:', cancelError.message));
     }
+    progressSourceRef.current?.close();
+    progressSourceRef.current = null;
     downloadAbortControllerRef.current?.abort();
+    downloadAbortControllerRef.current = null;
+    activeDownloadJobIdRef.current = '';
     setIsDownloading(false);
     setIsCompleted(false);
     setDownloadProgress(0);
+    setDownloadStage('preparing');
     setError('Descarga cancelada.');
   };
 
   const handleReset = () => {
+    infoAbortControllerRef.current?.abort();
+    infoRequestIdRef.current += 1;
+    setLoadingInfo(false);
     setVideoInfo(null);
     setUrl('');
     setIsCompleted(false);
     setDownloadProgress(0);
+    setDownloadStage('preparing');
     setError(null);
     setLastSavedPath('');
   };
@@ -389,7 +505,9 @@ export default function App() {
       <Header
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        showDesktopSettings={!isMobile}
+        showDesktopSettings={!isNativeMobile}
+        serverStatus={serverStatus}
+        isNativeMobile={isNativeMobile}
       />
 
       <main style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
@@ -401,11 +519,13 @@ export default function App() {
                 Descarga tu música en <span className="gradient-text">MP3 y MP4</span>
               </h1>
               <p className="hero-subtitle">
-                Convierte y descarga audio en alta fidelidad 320kbps o videos en HD directamente desde YouTube.
+                {isNativeMobile
+                  ? "Descarga MP3 o MP4 con la mejor calidad disponible en el contenido original de YouTube, TikTok y Facebook."
+                  : "Descarga MP3 o MP4 con la mejor calidad disponible en el contenido original de YouTube, TikTok, Instagram y Facebook."}
               </p>
 
               {/* MOSTRAR SELECTOR DE MODO EN ESCRITORIO (PC/LAPTOPS) CUANDO EL USUARIO CONFIGURÓ AMBAS CARPETAS */}
-              {!isMobile && hasConfiguredFolders && (
+              {!isNativeMobile && hasConfiguredFolders && (
                 <div style={{ display: 'flex', justifyContent: 'center', marginTop: '0.8rem', animation: 'fadeIn 0.3s ease-out' }}>
                   <div style={{
                     display: 'inline-flex',
@@ -484,10 +604,12 @@ export default function App() {
               onSubmit={handleFetchInfo}
               onClear={handleReset}
               isLoading={loadingInfo}
+              isBusy={isDownloading}
+              isNativeMobile={isNativeMobile}
             />
 
             {error && (
-              <div className="error-banner">
+              <div className="error-banner" role="alert">
                 <AlertCircle size={18} />
                 <span>{error}</span>
               </div>
@@ -518,9 +640,11 @@ export default function App() {
                 quality={quality}
                 resolution={resolution}
                 progress={downloadProgress}
+                stage={downloadStage}
                 title={videoInfo?.title || ''}
                 savedToPath={lastSavedPath}
-                isDirectSave={!isMobile && hasConfiguredFolders && saveToPCSwitch}
+                isDirectSave={!isNativeMobile && hasConfiguredFolders && saveToPCSwitch}
+                isNativeMobile={isNativeMobile}
                 onCancel={handleCancelDownload}
                 onReset={handleReset}
               />
@@ -537,16 +661,16 @@ export default function App() {
                   <div style={{ color: 'var(--accent-cyan)', marginBottom: '0.4rem' }}>
                     <Zap size={20} />
                   </div>
-                  <h4 style={{ fontFamily: 'var(--font-heading)', fontSize: '0.95rem', marginBottom: '0.2rem' }}>Conversión Rápida</h4>
-                  <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Audio en alta fidelidad sin tiempos de espera.</p>
+                  <h4 style={{ fontFamily: 'var(--font-heading)', fontSize: '0.95rem', marginBottom: '0.2rem' }}>Conversión confiable</h4>
+                  <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Procesamiento compatible con enlaces públicos de cuatro plataformas.</p>
                 </div>
 
                 <div className="glass-panel" style={{ padding: '1.1rem' }}>
                   <div style={{ color: 'var(--accent-purple)', marginBottom: '0.4rem' }}>
                     <Music2 size={20} />
                   </div>
-                  <h4 style={{ fontFamily: 'var(--font-heading)', fontSize: '0.95rem', marginBottom: '0.2rem' }}>Audio HQ 320 kbps</h4>
-                  <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Extrae audio con carátula e información incrustada.</p>
+                  <h4 style={{ fontFamily: 'var(--font-heading)', fontSize: '0.95rem', marginBottom: '0.2rem' }}>MP3 configurable</h4>
+                  <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Convierte el audio original al bitrate de salida que selecciones.</p>
                 </div>
 
                 <div className="glass-panel" style={{ padding: '1.1rem' }}>
@@ -559,19 +683,21 @@ export default function App() {
               </div>
             )}
 
-            <HistoryList
-              history={history}
-              onSelectUrl={(selectedUrl) => {
-                setUrl(selectedUrl);
-                handleFetchInfo(selectedUrl);
-              }}
-              onClearHistory={handleClearHistory}
-            />
+            {!isNativeMobile && !isDownloading && !loadingInfo && (
+              <HistoryList
+                history={history}
+                onSelectUrl={(selectedUrl) => {
+                  setUrl(selectedUrl);
+                  handleFetchInfo(selectedUrl);
+                }}
+                onClearHistory={handleClearHistory}
+              />
+            )}
           </>
         )}
 
         {/* APARTADO 2: SECCIÓN DE RUTAS DE PC (DISPONIBLE EN TODAS LAS PC Y LAPTOPS) */}
-        {!isMobile && activeTab === 'settings' && (
+        {!isNativeMobile && activeTab === 'settings' && (
           <SettingsSection
             mp3FolderPath={mp3FolderPath}
             setMp3FolderPath={setMp3FolderPath}
@@ -583,7 +709,7 @@ export default function App() {
       </main>
 
       <footer className="app-footer">
-        <p>Manuel Carrasco © {new Date().getFullYear()} • Descargas directas de YouTube en MP3/MP4</p>
+        <p>Manuel Carrasco © {new Date().getFullYear()} • Descargas MP3/MP4 de {isNativeMobile ? "YouTube, TikTok y Facebook" : "YouTube, TikTok, Instagram y Facebook"}</p>
       </footer>
     </div>
   );

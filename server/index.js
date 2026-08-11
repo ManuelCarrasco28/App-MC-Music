@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { isValidYoutubeUrl } from './utils/validator.js';
+import { isValidMediaUrl } from './utils/validator.js';
 import { getVideoInfo, processDownload } from './services/downloader.js';
 import { cancelDownloadJob, finishDownloadProgress, isValidProgressJobId, openProgressStream } from './services/progressStore.js';
 import { ensureYtDlpBinary } from './utils/ytDlpHelper.js';
@@ -13,6 +13,18 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 5050;
+
+function isDesktopBackend() {
+  return process.env.MC_MUSIC_DESKTOP === 'true';
+}
+
+function requireDesktopBackend(req, res, next) {
+  if (isDesktopBackend()) return next();
+  return res.status(403).json({
+    error: 'Esta funcion solo esta disponible en la aplicacion de escritorio local.',
+    code: 'DESKTOP_ONLY'
+  });
+}
 
 app.use(cors({
   origin(origin, callback) {
@@ -32,7 +44,7 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     service: 'MC-Music API',
-    runtime: process.env.VERCEL ? 'serverless' : 'local',
+    runtime: 'local',
     timestamp: new Date().toISOString()
   });
 });
@@ -41,15 +53,21 @@ app.post('/api/info', async (req, res) => {
   try {
     const { url } = req.body;
 
-    if (!url || !isValidYoutubeUrl(url)) {
-      return res.status(400).json({ error: 'Por favor ingresa un enlace válido de YouTube.' });
+    if (!url || !isValidMediaUrl(url)) {
+      return res.status(400).json({
+        error: 'Ingresa el enlace directo de un video de YouTube, TikTok, Instagram o Facebook.',
+        code: 'INVALID_URL'
+      });
     }
 
     const info = await getVideoInfo(url);
     res.json(info);
   } catch (error) {
     console.error('[API /api/info error]:', error.message);
-    res.status(500).json({ error: error.message || 'Error al obtener la información del video.' });
+    res.status(error.statusCode || 500).json({
+      error: error.message || 'Error al obtener la informacion del video.',
+      code: error.code || 'INFO_ERROR'
+    });
   }
 });
 
@@ -71,7 +89,14 @@ app.post('/api/download/cancel/:jobId', (req, res) => {
 app.get('/api/download', async (req, res) => {
   try {
     const { url } = req.query;
-    if (!url || !isValidYoutubeUrl(url)) {
+    const requestsCustomPath = Object.prototype.hasOwnProperty.call(req.query, 'customPath');
+    const requestsDirectSave = req.query.directSaveOnly === 'true' || String(req.query.directSaveOnly) === '1';
+    if (!isDesktopBackend() && (requestsCustomPath || requestsDirectSave)) {
+      const message = 'Guardar en una carpeta del PC solo esta disponible en la aplicacion de escritorio local.';
+      finishDownloadProgress(req.query.jobId, message);
+      return res.status(403).json({ error: message, code: 'DESKTOP_ONLY' });
+    }
+    if (!url || !isValidMediaUrl(url)) {
       finishDownloadProgress(req.query.jobId, 'La URL proporcionada no es válida.');
       return res.status(400).json({ error: 'La URL proporcionada no es válida.' });
     }
@@ -85,6 +110,8 @@ app.get('/api/download', async (req, res) => {
     }
   }
 });
+
+app.use('/api/settings', requireDesktopBackend);
 
 app.post('/api/settings/pick-folder', async (req, res) => {
   try {
@@ -104,10 +131,10 @@ app.post('/api/settings/validate-folder', (req, res) => {
   res.json({ success: true, folderPath: result.path });
 });
 
-app.post('/api/settings/open-folder', (req, res) => {
+app.post('/api/settings/open-folder', async (req, res) => {
   const { folderPath, defaultType } = req.body;
   try {
-    openFolderInExplorer(folderPath, defaultType);
+    await openFolderInExplorer(folderPath, defaultType);
     res.json({ success: true });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -126,7 +153,7 @@ app.get('*', (req, res, next) => {
 
 export function startServer(port = PORT, host = '0.0.0.0') {
   return new Promise((resolve, reject) => {
-    const server = app.listen(port, host, async () => {
+    const server = app.listen(port, host, () => {
       const address = server.address();
       const activePort = typeof address === 'object' && address ? address.port : port;
       console.log(`\n🎵 =========================================`);
@@ -134,11 +161,11 @@ export function startServer(port = PORT, host = '0.0.0.0') {
       console.log(`   URL API: http://${host === '0.0.0.0' ? 'localhost' : host}:${activePort}/api`);
       console.log(`=========================================\n`);
 
-      try {
-        await ensureYtDlpBinary();
-      } catch (err) {
-        console.warn('[warning] No se pudo descargar yt-dlp automáticamente al iniciar:', err.message);
-      }
+      // Electron debe mostrar la ventana aunque la red o GitHub esten lentos.
+      // La primera peticion reutiliza esta misma promesa si sigue en curso.
+      ensureYtDlpBinary().catch((err) => {
+        console.warn('[warning] No se pudo preparar yt-dlp al iniciar:', err.message);
+      });
 
       resolve(server);
     });
@@ -148,7 +175,7 @@ export function startServer(port = PORT, host = '0.0.0.0') {
 }
 
 const isDirectExecution = process.argv[1] && path.resolve(process.argv[1]) === __filename;
-if (!process.env.VERCEL && isDirectExecution) {
+if (isDirectExecution) {
   startServer().catch((err) => {
     console.error('[server] No se pudo iniciar el servidor:', err);
     process.exitCode = 1;

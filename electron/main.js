@@ -1,5 +1,9 @@
 import { app, BrowserWindow, dialog, shell } from 'electron';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 let mainWindow;
 let localServer;
@@ -22,12 +26,15 @@ async function startPackagedBackend() {
 async function createMainWindow() {
   const localPort = app.isPackaged ? await startPackagedBackend() : 5050;
 
+  const iconPath = path.join(__dirname, '../public/logo.png');
+
   mainWindow = new BrowserWindow({
     width: 1180,
     height: 820,
     minWidth: 860,
     minHeight: 640,
     show: false,
+    icon: iconPath,
     backgroundColor: '#090b10',
     autoHideMenuBar: true,
     webPreferences: {

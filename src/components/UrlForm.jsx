@@ -1,8 +1,8 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Youtube, Search, Clipboard, Loader2, X } from 'lucide-react';
+import { Search, Clipboard, Loader2, X } from 'lucide-react';
 
-export default function UrlForm({ url, setUrl, onSubmit, onClear, isLoading }) {
+export default function UrlForm({ url, setUrl, onSubmit, onClear, isLoading, isBusy = false, isNativeMobile = false }) {
   const handlePaste = async () => {
     try {
       const text = await navigator.clipboard.readText();
@@ -30,14 +30,14 @@ export default function UrlForm({ url, setUrl, onSubmit, onClear, isLoading }) {
       transition={{ duration: 0.45, delay: 0.1 }}
     >
       <div className="input-wrapper">
-        <Youtube className="input-icon" size={18} />
+        <Search className="input-icon" size={18} />
         <input
           type="text"
           className="url-input"
-          placeholder="Pega el enlace de YouTube aquí..."
+          placeholder={isNativeMobile ? "Pega el enlace de YouTube, TikTok o Facebook..." : "Pega el enlace de YouTube, TikTok, Instagram o Facebook..."}
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          disabled={isLoading}
+          disabled={isLoading || isBusy}
         />
         <div className="input-actions">
           {url.trim() && (
@@ -45,7 +45,7 @@ export default function UrlForm({ url, setUrl, onSubmit, onClear, isLoading }) {
               type="button"
               className="btn-icon-action url-action-button"
               onClick={onClear}
-              disabled={isLoading}
+              disabled={isLoading || isBusy}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               title="Limpiar enlace"
@@ -59,7 +59,7 @@ export default function UrlForm({ url, setUrl, onSubmit, onClear, isLoading }) {
             type="button"
             className="btn-icon-action url-action-button"
             onClick={handlePaste}
-            disabled={isLoading}
+            disabled={isLoading || isBusy}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             title="Pegar desde el portapapeles"
@@ -73,7 +73,7 @@ export default function UrlForm({ url, setUrl, onSubmit, onClear, isLoading }) {
       <motion.button
         type="submit"
         className="btn-primary"
-        disabled={isLoading || !url.trim()}
+        disabled={isLoading || isBusy || !url.trim()}
         whileHover={{ scale: isLoading || !url.trim() ? 1 : 1.015 }}
         whileTap={{ scale: isLoading || !url.trim() ? 1 : 0.985 }}
         transition={{ type: "spring", stiffness: 400, damping: 25 }}

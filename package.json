@@ -9,6 +9,7 @@
   },
   "scripts": {
     "start": "node server/index.js",
+    "test": "node --test server/tests/validator.test.js server/tests/downloader.test.js tests/mobile_extractor.test.js",
     "dev": "concurrently \"npm run server\" \"npm run client\"",
     "client": "vite",
     "server": "node server/index.js",
@@ -17,9 +18,16 @@
     "desktop": "electron electron/main.js",
     "desktop:dev": "concurrently -k \"npm run server\" \"npm run client\" \"wait-on http-get://127.0.0.1:5050/api/health http://127.0.0.1:3000 && electron electron/main.js\"",
     "desktop:pack": "npm run build && electron-builder --dir",
-    "desktop:build": "npm run build && electron-builder --win nsis"
+    "desktop:build": "npm run build && electron-builder --win nsis",
+    "android:sync": "npm run build && cap sync android",
+    "android:debug": "npm run android:sync && cd android && gradlew.bat assembleDebug && cd .. && node bin/copy-apk.js debug",
+    "android:release": "npm run android:sync && cd android && gradlew.bat assembleRelease && cd .. && node bin/copy-apk.js release"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/cli": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
+    "@capacitor/filesystem": "^8.1.2",
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "axios": "^1.7.9",
     "canvas-confetti": "^1.9.4",
@@ -46,6 +54,7 @@
   "build": {
     "appId": "com.mcmusic.desktop",
     "productName": "MC-Music",
+    "compression": "store",
     "asar": true,
     "asarUnpack": [
       "node_modules/@ffmpeg-installer/**/*"
@@ -60,10 +69,11 @@
       "package.json"
     ],
     "win": {
+      "icon": "public/logo.png",
       "target": [
         "nsis"
       ],
-      "artifactName": "MC-Music-Setup-${version}.${ext}"
+      "artifactName": "MC-Music-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,

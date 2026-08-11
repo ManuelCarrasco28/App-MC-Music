@@ -1,0 +1,13 @@
+{
+  "appId": "com.mcmusic.app",
+  "appName": "MC-Music",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  }
+}
