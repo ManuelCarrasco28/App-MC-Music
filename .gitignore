@@ -37,7 +37,10 @@ android/keystore.properties
 android/*.keystore
 android/*.jks
 
-# Installers (keep directory structure for releases)
-Instaladores/**/*.exe
-Instaladores/**/*.apk
-!Instaladores/**/.gitkeep
+# Installers
+# Android APK is ~10MB (tracked for direct GitHub download)
+!Instaladores/Android_Movil/*.apk
+
+# Windows EXE is ~129MB (exceeds GitHub 100MB limit, published via GitHub Releases)
+Instaladores/Windows_PC/*.exe
+

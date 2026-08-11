@@ -43,12 +43,12 @@
 ## 📥 Instalación Rápida
 
 ### 📱 Android (Móvil)
-1. Descarga el archivo de instalación **[MC-Music-1.0.apk](Instaladores/Android_Movil/MC-Music-1.0.apk)** en tu teléfono.
+1. Descarga el archivo de instalación **[MC-Music-1.0.apk](https://github.com/ManuelCarrasco28/App-MC-Music/raw/main/Instaladores/Android_Movil/MC-Music-1.0.apk)** en tu teléfono.
 2. Ábrelo e instálalo (si tu teléfono solicita permisos para instalar aplicaciones de fuentes desconocidas, concédelos).
 3. ¡Listo! Abre la app y descarga tu música y videos directamente a tu Galería.
 
 ### 💻 Windows (PC)
-1. Descarga el archivo de instalación **[MC-Music-1.0.exe](Instaladores/Windows_PC/MC-Music-1.0.exe)**.
+1. Descarga el archivo de instalación **[MC-Music-1.0.exe](https://github.com/ManuelCarrasco28/App-MC-Music/releases/latest/download/MC-Music-1.0.exe)** desde la sección de **[Releases en GitHub](https://github.com/ManuelCarrasco28/App-MC-Music/releases)**.
 2. Haz doble clic sobre `MC-Music-1.0.exe` para iniciar el asistente de instalación.
 3. Al finalizar, la aplicación creará un acceso directo en tu escritorio listo para usar.
 
