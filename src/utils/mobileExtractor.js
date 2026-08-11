@@ -455,6 +455,18 @@ async function getFacebookClientInfo(cleanUrl, meta, signal) {
         author = parts[1].trim();
       }
 
+      const ogVideoMatch = html.match(/<meta\s+property="og:video"\s+content="([^"]+)"/i)
+        || html.match(/<meta\s+property="og:video:secure_url"\s+content="([^"]+)"/i)
+        || html.match(/"browser_native_hd_url"\s*:\s*"([^"]+)"/i)
+        || html.match(/"browser_native_sd_url"\s*:\s*"([^"]+)"/i)
+        || html.match(/hd_src\s*:\s*"([^"]+)"/i)
+        || html.match(/sd_src\s*:\s*"([^"]+)"/i);
+
+      let directMp4 = ogVideoMatch?.[1] ? cleanUrlValue(ogVideoMatch[1]) : '';
+      if (directMp4.includes('lookaside.fbsbx.com') || directMp4.includes('fbsbx.com/lookaside')) {
+        directMp4 = '';
+      }
+
       return normalizeVideoInfo({
         id: 'facebook',
         title: decodeHtmlEntities(title),
@@ -462,6 +474,7 @@ async function getFacebookClientInfo(cleanUrl, meta, signal) {
         thumbnail: ogImageMatch?.[1] ? cleanUrlValue(ogImageMatch[1]) : '',
         videoResolutions: ['1080', '720', '480'],
         audioQualities: ['320', '256', '128'],
+        directMp4,
         metadataSource: 'facebook-opengraph-client'
       }, cleanUrl, meta);
     }
@@ -641,6 +654,9 @@ async function downloadWithAndroidManager({ downloadUrl, fileName, mimeType, job
         onStage('transferring');
         const pct = (downloadedBytes / totalBytes) * 100;
         onProgress(Math.min(99, Math.round(pct)));
+      } else if (downloadedBytes > 0) {
+        onStage('transferring');
+        onProgress(-1);
       }
 
       if (status.state === 'successful') {
@@ -689,7 +705,11 @@ async function downloadWithFetch({ downloadUrl, fileName, jobId, onProgress, onS
         if (done) break;
         chunks.push(value);
         receivedBytes += value.byteLength;
-        if (expectedBytes > 0) onProgress(Math.min(99, Math.round((receivedBytes / expectedBytes) * 100)));
+        if (expectedBytes > 0) {
+          onProgress(Math.min(99, Math.round((receivedBytes / expectedBytes) * 100)));
+        } else {
+          onProgress(-1);
+        }
       }
     } else {
       const arrayBuffer = await response.arrayBuffer();
@@ -783,6 +803,15 @@ export async function mobileProcessDownload({
     } catch (err) {
       console.warn('[MC-Music] Error cliente Instagram:', err.message);
     }
+  } else if (meta.platform === 'facebook' && (!customOrigin || format === 'mp4')) {
+    try {
+      const freshData = await getFacebookClientInfo(videoInfo.url, meta, signal);
+      if (freshData.directMp4) {
+        directDownloadUrl = freshData.directMp4;
+      }
+    } catch (err) {
+      console.warn('[MC-Music] Error cliente Facebook:', err.message);
+    }
   }
 
   // Resolver stream binario de descarga directa para YouTube, Instagram y Facebook.
@@ -808,7 +837,9 @@ export async function mobileProcessDownload({
       const cobaltInstances = [
         'https://dog.kittycat.boo/',
         'https://cobaltapi.kittycat.boo/',
-        'https://rue-cobalt.xenon.zone/'
+        'https://rue-cobalt.xenon.zone/',
+        'https://cobalt.hostux.net/',
+        'https://api.cobalt.tools/'
       ];
       for (const instance of cobaltInstances) {
         try {

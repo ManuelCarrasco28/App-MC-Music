@@ -310,7 +310,14 @@ export default function App() {
           quality,
           resolution,
           signal: downloadController.signal,
-          onProgress: (progress) => setDownloadProgress(Math.min(100, Math.max(0, Number(progress) || 0))),
+          onProgress: (progress) => {
+            const val = Number(progress);
+            if (val === -1) {
+              setDownloadProgress(-1);
+            } else {
+              setDownloadProgress(Math.min(100, Math.max(0, val || 0)));
+            }
+          },
           onStage: setDownloadStage
         });
         setIsDownloading(false);
@@ -368,7 +375,12 @@ export default function App() {
         if (progressEvent.stage) setDownloadStage(progressEvent.stage);
         if (progressEvent.error) setError(progressEvent.error);
         if (Number.isFinite(Number(progressEvent.progress))) {
-          setDownloadProgress(Math.min(100, Math.max(0, Number(progressEvent.progress))));
+          const val = Number(progressEvent.progress);
+          if (val === -1) {
+            setDownloadProgress(-1);
+          } else {
+            setDownloadProgress(Math.min(100, Math.max(0, val)));
+          }
         }
       } catch (progressError) {
         console.warn('No se pudo interpretar el progreso:', progressError.message);

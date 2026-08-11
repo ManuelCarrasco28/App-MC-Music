@@ -309,14 +309,17 @@ public class MediaDownloaderPlugin extends Plugin {
     private String getDownloadMapping(long id) {
         try {
             SharedPreferences prefs = getContext().getSharedPreferences("MC_Music_Downloads", Context.MODE_PRIVATE);
-            String fileName = prefs.getString(String.valueOf(id), null);
-            if (fileName != null) {
-                prefs.edit().remove(String.valueOf(id)).apply();
-            }
-            return fileName;
+            return prefs.getString(String.valueOf(id), null);
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private void removeDownloadMapping(long id) {
+        try {
+            SharedPreferences prefs = getContext().getSharedPreferences("MC_Music_Downloads", Context.MODE_PRIVATE);
+            prefs.edit().remove(String.valueOf(id)).apply();
+        } catch (Exception ignored) {}
     }
 
     private String resolveRedirects(String urlString, JSObject headers, String platform) {
@@ -688,10 +691,9 @@ public class MediaDownloaderPlugin extends Plugin {
             // 1. Intentar recuperar el nombre real de archivo usando SharedPreferences (solución definitiva)
             String savedFileName = getDownloadMapping(id);
             if (savedFileName != null) {
-                String mimeType = getString(cursor, DownloadManager.COLUMN_MEDIA_TYPE, "");
-                String dirType = (mimeType != null && mimeType.startsWith("video"))
-                    ? Environment.DIRECTORY_DCIM
-                    : Environment.DIRECTORY_MUSIC;
+                String lower = savedFileName.toLowerCase(Locale.ROOT);
+                boolean isAudio = lower.endsWith(".mp3") || lower.endsWith(".m4a") || lower.endsWith(".wav") || lower.endsWith(".ogg");
+                String dirType = isAudio ? Environment.DIRECTORY_MUSIC : Environment.DIRECTORY_DCIM;
                 File dir = new File(Environment.getExternalStoragePublicDirectory(dirType), "MC-Music");
                 File file = new File(dir, savedFileName);
                 if (file.exists()) {
@@ -796,6 +798,7 @@ public class MediaDownloaderPlugin extends Plugin {
 
                     try {
                         getContext().getContentResolver().insert(collection, values);
+                        removeDownloadMapping(id);
                     } catch (Exception ignored) {}
 
                     try {
