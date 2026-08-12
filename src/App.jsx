@@ -118,18 +118,21 @@ export default function App() {
   // Rutas separadas para MP3 y MP4
   const [mp3FolderPath, setMp3FolderPath] = useState(() => {
     const saved = localStorage.getItem('mc_music_mp3_folder');
-    if (!saved || saved.includes('Users\\Public')) return '';
-    return saved;
+    return saved ? saved.trim() : '';
   });
 
   const [mp4FolderPath, setMp4FolderPath] = useState(() => {
     const saved = localStorage.getItem('mc_music_mp4_folder');
-    if (!saved || saved.includes('Users\\Public')) return '';
-    return saved;
+    return saved ? saved.trim() : '';
   });
 
-  // Determinar si el usuario ya configuró AMBAS carpetas en su PC (MP3 y MP4)
-  const hasConfiguredFolders = Boolean(!isNativeMobile && mp3FolderPath && mp3FolderPath.trim() && mp4FolderPath && mp4FolderPath.trim());
+  // Determinar si el usuario ya configuró AL MENOS UNA carpeta en su PC (MP3 o MP4)
+  const hasConfiguredFolders = Boolean(
+    !isNativeMobile && (
+      (mp3FolderPath && mp3FolderPath.trim()) ||
+      (mp4FolderPath && mp4FolderPath.trim())
+    )
+  );
 
   // Activador de Modo de Descarga (disponible en PC y Laptops)
   const [saveToPCSwitch, setSaveToPCSwitch] = useState(() => {
@@ -146,8 +149,34 @@ export default function App() {
     }
   });
 
+  const saveDesktopSettings = (updatedFields) => {
+    if (isNativeMobile) return;
+    fetch('/api/settings/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedFields)
+    }).catch((err) => console.warn('[App] Error guardando ajustes en disco:', err.message));
+  };
+
+  useEffect(() => {
+    if (isNativeMobile) return;
+    fetch('/api/settings/load')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.success && data.config) {
+          const { mp3FolderPath: mp3, mp4FolderPath: mp4, saveToPCSwitch: sw, history: hist } = data.config;
+          if (typeof mp3 === 'string' && mp3) setMp3FolderPath(mp3);
+          if (typeof mp4 === 'string' && mp4) setMp4FolderPath(mp4);
+          if (typeof sw === 'boolean') setSaveToPCSwitch(sw);
+          if (Array.isArray(hist) && hist.length > 0) setHistory(hist);
+        }
+      })
+      .catch((err) => console.warn('[App] No se pudo cargar configuración de disco:', err.message));
+  }, [isNativeMobile]);
+
   useEffect(() => {
     localStorage.setItem('mc_music_save_to_pc_switch', saveToPCSwitch);
+    saveDesktopSettings({ saveToPCSwitch });
   }, [saveToPCSwitch]);
 
   useEffect(() => {
@@ -156,6 +185,7 @@ export default function App() {
     } else {
       localStorage.removeItem('mc_music_mp3_folder');
     }
+    saveDesktopSettings({ mp3FolderPath });
   }, [mp3FolderPath]);
 
   useEffect(() => {
@@ -164,6 +194,7 @@ export default function App() {
     } else {
       localStorage.removeItem('mc_music_mp4_folder');
     }
+    saveDesktopSettings({ mp4FolderPath });
   }, [mp4FolderPath]);
 
   useEffect(() => {
@@ -172,7 +203,22 @@ export default function App() {
     } catch (err) {
       console.warn('Error guardando historial:', err);
     }
+    saveDesktopSettings({ history });
   }, [history]);
+
+  const [updateInfo, setUpdateInfo] = useState(null);
+
+  useEffect(() => {
+    if (isNativeMobile) return;
+    fetch('/api/update/check')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.updateAvailable) {
+          setUpdateInfo(data);
+        }
+      })
+      .catch((err) => console.warn('[App] Error comprobando actualizaciones:', err.message));
+  }, [isNativeMobile]);
 
   useEffect(() => {
     if (isNativeMobile) {
@@ -520,6 +566,7 @@ export default function App() {
         showDesktopSettings={!isNativeMobile}
         serverStatus={serverStatus}
         isNativeMobile={isNativeMobile}
+        updateInfo={updateInfo}
       />
 
       <main style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>

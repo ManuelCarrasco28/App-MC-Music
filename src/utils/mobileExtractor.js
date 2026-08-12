@@ -316,108 +316,7 @@ async function getYouTubeClientInfo(cleanUrl, meta, signal) {
   }, cleanUrl, meta);
 }
 
-async function getInstagramClientInfo(cleanUrl, meta, signal) {
-  // Probar con múltiples espejos de fixers de Instagram activos y conocidos
-  const mirrors = ['fxig.seria.moe', 'instagramez.com', 'ddinstagram.com'];
-  for (const mirror of mirrors) {
-    try {
-      const ddUrl = cleanUrl.replace(/(www\.)?instagram\.com/, mirror);
-      const res = await fetch(ddUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
-        },
-        signal
-      });
 
-      if (res.ok) {
-        const html = await res.text();
-        const ogTitleMatch = html.match(/<meta\s+property="og:title"\s+content="([^"]+)"/i)
-          || html.match(/<title>([^<]+)<\/title>/i);
-        const ogImageMatch = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i);
-        const ogDescMatch = html.match(/<meta\s+property="og:description"\s+content="([^"]+)"/i);
-        const ogVideoMatch = html.match(/<meta\s+property="og:video"\s+content="([^"]+)"/i)
-          || html.match(/<meta\s+property="og:video:secure_url"\s+content="([^"]+)"/i);
-
-        let title = ogTitleMatch?.[1] || ogDescMatch?.[1] || 'Reel de Instagram';
-        let author = 'Instagram';
-
-        if (title.includes('en Instagram')) {
-          const parts = title.split('en Instagram');
-          author = parts[0].replace(/^@/, '').trim();
-          title = parts[1]?.replace(/^:[\s"]*/, '').trim() || title;
-        }
-
-        const directMp4 = ogVideoMatch?.[1] ? cleanUrlValue(ogVideoMatch[1]) : '';
-
-        if (directMp4) {
-          return normalizeVideoInfo({
-            id: 'instagram',
-            title: decodeHtmlEntities(title),
-            author: decodeHtmlEntities(author),
-            thumbnail: ogImageMatch?.[1] ? cleanUrlValue(ogImageMatch[1]) : '',
-            videoResolutions: ['1080', '720', '480'],
-            audioQualities: ['320', '256', '128'],
-            directMp4,
-            metadataSource: `${mirror}-client`
-          }, cleanUrl, meta);
-        }
-      }
-    } catch (err) {
-      console.warn(`[MC-Music] Error obteniendo datos de ${mirror}:`, err.message);
-    }
-  }
-
-  // Fallback original
-  try {
-    const res = await fetch(cleanUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
-        'Accept-Language': 'es-ES,es;q=0.9'
-      },
-      signal
-    });
-
-    if (res.ok) {
-      const html = await res.text();
-      const ogTitleMatch = html.match(/<meta\s+property="og:title"\s+content="([^"]+)"/i)
-        || html.match(/<title>([^<]+)<\/title>/i);
-      const ogImageMatch = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i);
-      const ogDescMatch = html.match(/<meta\s+property="og:description"\s+content="([^"]+)"/i);
-
-      let title = ogTitleMatch?.[1] || ogDescMatch?.[1] || 'Reel de Instagram';
-      let author = 'Instagram';
-
-      if (title.includes('en Instagram')) {
-        const parts = title.split('en Instagram');
-        author = parts[0].replace(/^@/, '').trim();
-        title = parts[1]?.replace(/^:[\s"]*/, '').trim() || title;
-      }
-
-      return normalizeVideoInfo({
-        id: 'instagram',
-        title: decodeHtmlEntities(title),
-        author: decodeHtmlEntities(author),
-        thumbnail: ogImageMatch?.[1] ? cleanUrlValue(ogImageMatch[1]) : '',
-        videoResolutions: ['1080', '720', '480'],
-        audioQualities: ['320', '256', '128'],
-        metadataSource: 'instagram-opengraph-client'
-      }, cleanUrl, meta);
-    }
-  } catch (err) {
-    if (signal?.aborted) throw err;
-  }
-
-  return normalizeVideoInfo({
-    id: meta.platform,
-    title: `Contenido de ${meta.label}`,
-    author: meta.label,
-    thumbnail: '',
-    videoResolutions: ['1080', '720', '480'],
-    audioQualities: ['320', '256', '128'],
-    metadataSource: 'instagram-client'
-  }, cleanUrl, meta);
-}
 
 async function getFacebookClientInfo(cleanUrl, meta, signal) {
   try {
@@ -500,14 +399,13 @@ export async function mobileGetVideoInfo(rawUrl, options = {}) {
   }
   const meta = detectPlatformClient(cleanUrl);
   if (meta.platform === 'instagram') {
-    throw new Error('Instagram no está disponible en la versión móvil de la aplicación. Por favor, utiliza la versión de escritorio.');
+    throw new Error('Instagram no está disponible en la versión móvil de la aplicación. Por favor, utiliza la versión para PC.');
   }
   if (!cleanUrl || ['unknown', 'generic'].includes(meta.platform)) {
     throw new Error('Pega un enlace valido de YouTube, TikTok o Facebook.');
   }
 
   // 1. Si tenemos servidor backend configurado y en línea, preferimos usar el backend
-  // para obtener metadatos y medios precisos (ya que tiene yt-dlp y FFmpeg).
   const customOrigin = getMobileApiOrigin();
   if (customOrigin) {
     try {
@@ -539,14 +437,6 @@ export async function mobileGetVideoInfo(rawUrl, options = {}) {
       return await getYouTubeClientInfo(cleanUrl, meta, options.signal);
     } catch (ytError) {
       console.warn('[MC-Music] Fallo oEmbed YouTube:', ytError.message);
-    }
-  }
-
-  if (meta.platform === 'instagram') {
-    try {
-      return await getInstagramClientInfo(cleanUrl, meta, options.signal);
-    } catch (instaError) {
-      console.warn('[MC-Music] Fallo Instagram:', instaError.message);
     }
   }
 
@@ -775,9 +665,8 @@ export async function mobileProcessDownload({
   reportProgress(0);
   onStage('preparing');
 
-  const meta = detectPlatformClient(videoInfo.url);
   if (meta.platform === 'instagram') {
-    throw new Error('Instagram no está disponible en la versión móvil de la aplicación. Por favor, utiliza la versión de escritorio.');
+    throw new Error('Instagram no está disponible en la versión móvil de la aplicación. Por favor, utiliza la versión para PC.');
   }
   let directDownloadUrl = '';
   const customOrigin = getMobileApiOrigin();
@@ -793,15 +682,6 @@ export async function mobileProcessDownload({
         : (freshData.directMp3 || freshData.directMp4);
     } catch (err) {
       console.warn('[MC-Music] Error cliente TikTok:', err.message);
-    }
-  } else if (meta.platform === 'instagram' && (!customOrigin || format === 'mp4')) {
-    try {
-      const freshData = await getInstagramClientInfo(videoInfo.url, meta, signal);
-      if (freshData.directMp4) {
-        directDownloadUrl = freshData.directMp4;
-      }
-    } catch (err) {
-      console.warn('[MC-Music] Error cliente Instagram:', err.message);
     }
   } else if (meta.platform === 'facebook' && (!customOrigin || format === 'mp4')) {
     try {

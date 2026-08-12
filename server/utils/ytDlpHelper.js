@@ -32,7 +32,11 @@ let activeEnsurePromise = null;
 
 function validateBinary(binaryPath) {
   return new Promise((resolve, reject) => {
-    execFile(binaryPath, ['--version'], { timeout: 15000 }, (error) => {
+    const options = { timeout: 15000, windowsHide: true };
+    if (process.versions.electron) {
+      options.env = { ...process.env, ELECTRON_RUN_AS_NODE: '1' };
+    }
+    execFile(binaryPath, ['--version'], options, (error) => {
       if (error) return reject(error);
       resolve();
     });
@@ -155,7 +159,7 @@ export function getFfmpegPath() {
 
 /**
  * Garantiza una única descarga atómica de yt-dlp y verifica el ejecutable antes
- * de publicarlo. Así ninguna petición puede ejecutar un archivo parcial.
+ * de publicarlo. Copia primero el binario integrado antes de intentar red.
  */
 export async function ensureYtDlpBinary() {
   if (binaryReady && fs.existsSync(ytDlpPath) && !shouldRefreshBinary()) return ytDlpPath;
@@ -174,7 +178,6 @@ export async function ensureYtDlpBinary() {
             console.log(`[yt-dlp] Buscando actualizaciones del canal ${updateChannel}...`);
             await downloadAndPublishBinary();
           } catch (updateError) {
-            // Una caída de Internet no debe inutilizar una versión local válida.
             console.warn('[yt-dlp] No se pudo actualizar; se conserva el binario instalado:', updateError.message);
             writeUpdateState({ updateError: String(updateError.message || updateError).slice(0, 300) });
           }
@@ -183,6 +186,31 @@ export async function ensureYtDlpBinary() {
       } catch (validationError) {
         console.warn('[yt-dlp] El binario existente está incompleto; se reemplazará:', validationError.message);
         fs.rmSync(ytDlpPath, { force: true });
+      }
+    }
+
+    // Si el binario en userData/bin no existe, buscamos el binario empaquetado con la app
+    const bundledCandidates = [
+      path.join(projectRoot, 'bin', ytDlpFilename),
+      path.join(projectRoot, 'app.asar.unpacked', 'bin', ytDlpFilename),
+      process.resourcesPath ? path.join(process.resourcesPath, 'app.asar.unpacked', 'bin', ytDlpFilename) : '',
+      process.resourcesPath ? path.join(process.resourcesPath, 'bin', ytDlpFilename) : ''
+    ].filter(Boolean);
+
+    for (const candidate of bundledCandidates) {
+      if (fs.existsSync(candidate)) {
+        try {
+          console.log(`[yt-dlp] Copiando binario integrado desde ${candidate} hacia ${ytDlpPath}...`);
+          fs.copyFileSync(candidate, ytDlpPath);
+          if (!isWindows) fs.chmodSync(ytDlpPath, '755');
+          await validateBinary(ytDlpPath);
+          binaryReady = true;
+          writeUpdateState({ updatedAt: Date.now(), bundledSource: candidate });
+          return ytDlpPath;
+        } catch (copyErr) {
+          console.warn('[yt-dlp] Falló copia del binario integrado; se reintentará:', copyErr.message);
+          fs.rmSync(ytDlpPath, { force: true });
+        }
       }
     }
 

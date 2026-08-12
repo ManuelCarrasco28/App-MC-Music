@@ -105,7 +105,11 @@ export default function VideoCard({ videoInfo, onOpenOriginal }) {
           target="_blank"
           rel="noopener noreferrer"
           className="original-link"
-          onClick={onOpenOriginal}
+          onClick={(e) => {
+            if (typeof onOpenOriginal === 'function') {
+              onOpenOriginal(e);
+            }
+          }}
         >
           <span>Ver enlace original</span>
           <ExternalLink size={14} />

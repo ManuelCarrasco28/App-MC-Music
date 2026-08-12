@@ -10,6 +10,26 @@ import { finishDownloadProgress, registerDownloadCancellation, updateDownloadPro
 const tempDir = path.join(os.tmpdir(), 'mc_music_downloads');
 fs.mkdirSync(tempDir, { recursive: true });
 
+export function cleanOrphanedTempFiles() {
+  try {
+    if (!fs.existsSync(tempDir)) return;
+    const now = Date.now();
+    const files = fs.readdirSync(tempDir);
+    for (const file of files) {
+      const filePath = path.join(tempDir, file);
+      try {
+        const stat = fs.statSync(filePath);
+        if (now - stat.mtimeMs > 30 * 60 * 1000) {
+          fs.unlinkSync(filePath);
+        }
+      } catch {}
+    }
+  } catch (err) {
+    console.warn('[downloader] Error al limpiar temporales huérfanos:', err.message);
+  }
+}
+cleanOrphanedTempFiles();
+
 const INFO_CACHE_TTL_MS = 5 * 60 * 1000;
 const infoCache = new Map();
 const pendingInfoRequests = new Map();
@@ -579,8 +599,7 @@ export function buildVideoFormatSelector(quality, formatDetails = null) {
   const filter = actualWidth && actualHeight
     ? `[width=${actualWidth}][height=${actualHeight}]`
     : `[height=${selectedQuality}]`;
-  // Se exige la altura exacta: nunca se etiqueta como 1080p un archivo 720p.
-  // Se prefiere audio M4A para compatibilidad, sin sacrificar el mejor video.
+
   return `bestvideo${filter}+bestaudio[ext=m4a]/bestvideo${filter}+bestaudio/best${filter}[ext=mp4]/best${filter}`;
 }
 
@@ -864,14 +883,15 @@ export async function processDownload(req, res) {
     });
   };
 
+  const ffmpegExecPath = path.resolve(getFfmpegPath());
   const args = [
     ...getCommonYtDlpArgs(),
-    '--ffmpeg-location', getFfmpegPath(),
+    '--ffmpeg-location', ffmpegExecPath,
     '--concurrent-fragments', '4',
     '--check-formats',
     '--newline',
     '--no-color',
-    '--progress-delta', '0.2',
+    '--progress-delta', '0.05',
     '--progress-template', 'download:MC_PROGRESS:%(progress._percent_str)s',
     '-o', outputTemplate
   ];
@@ -921,7 +941,7 @@ export async function processDownload(req, res) {
       if (match) {
         const sourceProgress = Number(match[1]);
         if (Number.isFinite(sourceProgress)) {
-          const mappedProgress = Math.min(92, Math.max(5, Math.round(5 + sourceProgress * 0.87)));
+          const mappedProgress = Math.min(92.0, Math.max(5.0, Number((5 + sourceProgress * 0.87).toFixed(1))));
           if (mappedProgress > latestProgress) {
             latestProgress = mappedProgress;
             updateDownloadProgress(jobId, latestProgress, 'downloading');

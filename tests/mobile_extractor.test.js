@@ -106,4 +106,12 @@ test('mobileGetVideoInfo - extrae directMp4 de browser_native_hd_url en el html 
   }
 });
 
+test('mobileGetVideoInfo - rechaza URLs de Instagram en dispositivos móviles', async () => {
+  const { mobileGetVideoInfo } = await import('../src/utils/mobileExtractor.js');
+  await assert.rejects(
+    () => mobileGetVideoInfo('https://www.instagram.com/reel/C123456/'),
+    /Instagram no está disponible en la versión móvil/
+  );
+});
+
 

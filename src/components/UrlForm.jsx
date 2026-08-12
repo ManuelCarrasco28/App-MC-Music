@@ -3,14 +3,22 @@ import { motion } from 'framer-motion';
 import { Search, Clipboard, Loader2, X } from 'lucide-react';
 
 export default function UrlForm({ url, setUrl, onSubmit, onClear, isLoading, isBusy = false, isNativeMobile = false }) {
+  const [pasteNotice, setPasteNotice] = React.useState(null);
+
   const handlePaste = async () => {
+    setPasteNotice(null);
     try {
+      if (!navigator.clipboard?.readText) {
+        throw new Error('Usa Ctrl+V para pegar');
+      }
       const text = await navigator.clipboard.readText();
       if (text) {
         setUrl(text);
       }
     } catch (err) {
-      console.warn('No se pudo acceder al portapapeles:', err);
+      console.warn('No se pudo acceder al portapapeles:', err.message);
+      setPasteNotice('Presiona Ctrl+V para pegar');
+      setTimeout(() => setPasteNotice(null), 3500);
     }
   };
 
@@ -63,9 +71,10 @@ export default function UrlForm({ url, setUrl, onSubmit, onClear, isLoading, isB
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             title="Pegar desde el portapapeles"
+            style={{ position: 'relative' }}
           >
             <Clipboard size={13} />
-            <span>Pegar</span>
+            <span>{pasteNotice || 'Pegar'}</span>
           </motion.button>
         </div>
       </div>

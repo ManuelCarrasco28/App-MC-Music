@@ -57,7 +57,8 @@
     "compression": "store",
     "asar": true,
     "asarUnpack": [
-      "node_modules/@ffmpeg-installer/**/*"
+      "node_modules/@ffmpeg-installer/**/*",
+      "bin/**/*"
     ],
     "directories": {
       "output": "release"

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CheckCircle2, AlertCircle, Save, Music, Video, X, ArrowLeft, FolderSearch, Loader2 } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Save, Music, Video, X, ArrowLeft, FolderSearch, Loader2, RefreshCw, Sparkles } from 'lucide-react';
 
 export default function SettingsSection({
   mp3FolderPath,
@@ -15,6 +15,37 @@ export default function SettingsSection({
   const [isVerifying, setIsVerifying] = useState(false);
   const [pickingMp3, setPickingMp3] = useState(false);
   const [pickingMp4, setPickingMp4] = useState(false);
+
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateResult, setUpdateResult] = useState(null);
+
+  const handleManualUpdateCheck = async () => {
+    setCheckingUpdate(true);
+    setUpdateResult(null);
+    try {
+      const res = await fetch('/api/update/check');
+      const data = await res.json();
+      if (data?.updateAvailable) {
+        setUpdateResult({
+          type: 'update',
+          version: data.latestVersion,
+          url: data.downloadUrl
+        });
+      } else {
+        setUpdateResult({
+          type: 'latest',
+          version: data.currentVersion || '1.0.0'
+        });
+      }
+    } catch (err) {
+      setUpdateResult({
+        type: 'error',
+        text: 'No se pudo conectar con el servidor de actualizaciones.'
+      });
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
 
   const handleValidateSingleFolder = async (folderPath) => {
     if (!folderPath || !folderPath.trim()) return '';
@@ -56,26 +87,31 @@ export default function SettingsSection({
   const handleSaveAll = async () => {
     setStatusMessage(null);
 
-    // VALIDACIÓN OBLIGATORIA: Ambas rutas (MP3 y MP4) deben estar ingresadas
-    if (!tempMp3Path.trim() || !tempMp4Path.trim()) {
+    const hasMp3 = Boolean(tempMp3Path.trim());
+    const hasMp4 = Boolean(tempMp4Path.trim());
+
+    if (!hasMp3 && !hasMp4) {
       setStatusMessage({
         type: 'error',
-        text: 'Es obligatorio configurar ambas carpetas (Música MP3 y Videos MP4) antes de guardar.'
+        text: 'Ingresa al menos una carpeta (Música MP3 o Videos MP4) antes de guardar.'
       });
       return;
     }
 
     setIsVerifying(true);
     try {
-      const validMp3 = await handleValidateSingleFolder(tempMp3Path);
-      const validMp4 = await handleValidateSingleFolder(tempMp4Path);
+      const validMp3 = hasMp3 ? await handleValidateSingleFolder(tempMp3Path) : '';
+      const validMp4 = hasMp4 ? await handleValidateSingleFolder(tempMp4Path) : '';
 
       setMp3FolderPath(validMp3);
       setMp4FolderPath(validMp4);
       setTempMp3Path(validMp3);
       setTempMp4Path(validMp4);
 
-      setStatusMessage({ type: 'success', text: '¡Ambas rutas guardadas con éxito! Redirigiendo al descargador...' });
+      const msg = hasMp3 && hasMp4
+        ? '¡Ambas rutas guardadas con éxito! Redirigiendo al descargador...'
+        : '¡Ruta guardada con éxito! Redirigiendo al descargador...';
+      setStatusMessage({ type: 'success', text: msg });
       setTimeout(() => onSwitchToDownloader(), 800);
     } catch (err) {
       setStatusMessage({ type: 'error', text: err.message });

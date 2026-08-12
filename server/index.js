@@ -49,6 +49,58 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+function compareSemver(v1, v2) {
+  const n1 = String(v1).replace(/^v/i, '').split('.').map(Number);
+  const n2 = String(v2).replace(/^v/i, '').split('.').map(Number);
+  for (let i = 0; i < Math.max(n1.length, n2.length); i++) {
+    const val1 = n1[i] || 0;
+    const val2 = n2[i] || 0;
+    if (val1 > val2) return 1;
+    if (val1 < val2) return -1;
+  }
+  return 0;
+}
+
+app.get('/api/update/check', async (req, res) => {
+  const currentVersion = '1.0.0';
+  const repoOwner = 'ManuelCarrasco28';
+  const repoName = 'App-MC-Music';
+  const githubUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/releases/latest`;
+
+  try {
+    const controller = new AbortController();
+    const timeoutTimer = setTimeout(() => controller.abort(), 4500);
+
+    const response = await fetch(githubUrl, {
+      headers: {
+        'User-Agent': 'MC-Music-App',
+        'Accept': 'application/vnd.github.v3+json'
+      },
+      signal: controller.signal
+    }).finally(() => clearTimeout(timeoutTimer));
+
+    if (response.ok) {
+      const data = await response.json();
+      const latestTag = data.tag_name || data.name || '';
+      const latestVersion = latestTag.replace(/^v/i, '').trim();
+      const updateAvailable = compareSemver(latestVersion, currentVersion) > 0;
+      const downloadUrl = data.assets?.[0]?.browser_download_url || data.html_url || `https://github.com/${repoOwner}/${repoName}/releases`;
+
+      return res.json({
+        updateAvailable,
+        currentVersion,
+        latestVersion: latestVersion || currentVersion,
+        releaseNotes: data.body || '',
+        downloadUrl
+      });
+    }
+
+    return res.json({ updateAvailable: false, currentVersion });
+  } catch (err) {
+    return res.json({ updateAvailable: false, currentVersion, error: err.message });
+  }
+});
+
 app.post('/api/info', async (req, res) => {
   try {
     const { url } = req.body;
@@ -111,7 +163,27 @@ app.get('/api/download', async (req, res) => {
   }
 });
 
+import { loadStoredConfig, saveStoredConfig } from './utils/configStore.js';
+
 app.use('/api/settings', requireDesktopBackend);
+
+app.get('/api/settings/load', (req, res) => {
+  try {
+    const config = loadStoredConfig();
+    res.json({ success: true, config });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/settings/save', (req, res) => {
+  try {
+    const updated = saveStoredConfig(req.body);
+    res.json({ success: true, config: updated });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
 
 app.post('/api/settings/pick-folder', async (req, res) => {
   try {

@@ -29,7 +29,7 @@ export default function DownloadProgress({
 }) {
   const numericProgress = Number(progress);
   const hasDeterminateProgress = Number.isFinite(numericProgress) && numericProgress >= 0;
-  const safeProgress = Math.min(100, Math.max(0, Math.round(numericProgress || 0)));
+  const safeProgress = Math.min(100, Math.max(0, Number(numericProgress.toFixed(1)) || 0));
 
   useEffect(() => {
     if (!isCompleted) return;
@@ -75,12 +75,12 @@ export default function DownloadProgress({
               className="progress-bar-fill"
               initial={{ width: '0%' }}
               animate={{ width: hasDeterminateProgress ? `${safeProgress}%` : '35%' }}
-              transition={{ duration: 0.25, ease: 'easeOut' }}
+              transition={{ duration: 0.1, ease: 'linear' }}
             />
           </div>
 
           <strong className="progress-percentage">
-            {hasDeterminateProgress ? `${safeProgress}% completado` : 'Procesando…'}
+            {hasDeterminateProgress ? `${safeProgress.toFixed(1)}% completado` : 'Procesando…'}
           </strong>
 
           <span className="progress-detail">

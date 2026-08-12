@@ -58,10 +58,11 @@ export function updateDownloadProgress(jobId, progress, stage = 'downloading') {
   const job = getOrCreateJob(jobId);
   if (job.finished) return;
 
-  const normalizedProgress = Math.max(
+  const rawVal = Math.max(
     Number(job.lastEvent.progress) || 0,
-    Math.min(99, Math.max(0, Math.round(Number(progress) || 0)))
+    Math.min(99, Math.max(0, Number(progress) || 0))
   );
+  const normalizedProgress = Number(rawVal.toFixed(1));
   job.lastEvent = { progress: normalizedProgress, stage };
   for (const listener of job.listeners) sendEvent(listener, job.lastEvent);
 }

@@ -13,18 +13,26 @@ if (!hasSingleInstanceLock) {
   app.quit();
 }
 
-async function startPackagedBackend() {
-  process.env.NODE_ENV = 'production';
+async function startDesktopBackend() {
   process.env.MC_MUSIC_DESKTOP = 'true';
-  process.env.MC_MUSIC_BIN_DIR = path.join(app.getPath('userData'), 'bin');
+  process.env.MC_MUSIC_DATA_DIR = app.getPath('userData');
+  if (!process.env.MC_MUSIC_BIN_DIR) {
+    process.env.MC_MUSIC_BIN_DIR = path.join(app.getPath('userData'), 'bin');
+  }
 
   const { startServer } = await import('../server/index.js');
-  localServer = await startServer(0, '127.0.0.1');
+  const targetPort = app.isPackaged ? 0 : Number(process.env.PORT) || 5050;
+  localServer = await startServer(targetPort, '127.0.0.1');
   return localServer.address().port;
 }
 
 async function createMainWindow() {
-  const localPort = app.isPackaged ? await startPackagedBackend() : 5050;
+  let localPort = 5050;
+  try {
+    localPort = await startDesktopBackend();
+  } catch (backendError) {
+    console.warn('[electron] No se pudo iniciar el servidor integrado en puerto dinámico:', backendError.message);
+  }
 
   const iconPath = path.join(__dirname, '../public/logo.png');
 
@@ -52,7 +60,7 @@ async function createMainWindow() {
 
   const appUrl = app.isPackaged
     ? `http://127.0.0.1:${localPort}`
-    : 'http://127.0.0.1:3000';
+    : (process.env.VITE_DEV_SERVER_URL || 'http://127.0.0.1:3000');
 
   try {
     await mainWindow.loadURL(appUrl);

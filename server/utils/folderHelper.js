@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 
 /**
  * Normaliza y valida si una ruta de carpeta existe o la crea si es válida.
@@ -39,7 +39,7 @@ export function pickFolderDialog() {
 
     const psCmd = `powershell -Sta -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.FolderBrowserDialog; $d.ShowNewFolderButton = $true; $d.Description = 'Selecciona la carpeta de destino para tus descargas'; if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $d.SelectedPath }"`;
 
-    exec(psCmd, { maxBuffer: 1024 * 1024 }, (err, stdout) => {
+    exec(psCmd, { maxBuffer: 1024 * 1024, windowsHide: true }, (err, stdout) => {
       if (err) {
         return reject(new Error('Diálogo cancelado o no disponible.'));
       }
@@ -96,16 +96,15 @@ export function openFolderInExplorer(folderPath, defaultType = 'Music') {
   console.log(`[folderHelper] Desplegando Explorador de Windows en la ruta real: "${absolutePath}"`);
 
   if (process.platform === 'win32') {
-    const psCmd = `powershell -Command "Start-Process explorer.exe -ArgumentList '${absolutePath.replace(/'/g, "''")}'"`;
-    exec(psCmd, (err) => {
+    execFile('explorer.exe', [absolutePath], { windowsHide: true }, (err) => {
       if (err) {
-        console.warn('[folderHelper] PowerShell error, probando cmd.exe start:', err.message);
-        exec(`cmd.exe /c start "" "${absolutePath}"`);
+        console.warn('[folderHelper] execFile explorer.exe error, probando cmd.exe start:', err.message);
+        execFile('cmd.exe', ['/c', 'start', '""', absolutePath], { windowsHide: true });
       }
     });
   } else if (process.platform === 'darwin') {
-    exec(`open "${absolutePath}"`);
+    execFile('open', [absolutePath]);
   } else {
-    exec(`xdg-open "${absolutePath}"`);
+    execFile('xdg-open', [absolutePath]);
   }
 }
