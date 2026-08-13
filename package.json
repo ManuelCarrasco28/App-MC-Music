@@ -28,6 +28,7 @@
     "@capacitor/cli": "^8.5.0",
     "@capacitor/core": "^8.5.0",
     "@capacitor/filesystem": "^8.1.2",
+    "@capacitor/preferences": "^8.0.1",
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "axios": "^1.7.9",
     "canvas-confetti": "^1.9.4",

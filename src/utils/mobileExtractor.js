@@ -10,6 +10,7 @@
  */
 
 import { Capacitor, registerPlugin } from '@capacitor/core';
+import { Preferences } from '@capacitor/preferences';
 
 const API_STORAGE_KEY = 'mc_music_mobile_api_base';
 const PREFERRED_MIRROR_KEY = 'mc_music_preferred_cobalt_mirror';
@@ -18,6 +19,27 @@ const TIKWM_TIMEOUT_MS = 14_000;
 const DOWNLOAD_POLL_MS = 450;
 
 const MediaDownloader = registerPlugin('MediaDownloader');
+
+async function getPreferredCobaltMirror() {
+  try {
+    const { value } = await Preferences.get({ key: PREFERRED_MIRROR_KEY });
+    if (value) return value;
+  } catch {}
+  try {
+    return globalThis.localStorage?.getItem(PREFERRED_MIRROR_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+async function setPreferredCobaltMirror(instanceUrl) {
+  try {
+    await Preferences.set({ key: PREFERRED_MIRROR_KEY, value: instanceUrl });
+  } catch {}
+  try {
+    globalThis.localStorage?.setItem(PREFERRED_MIRROR_KEY, instanceUrl);
+  } catch {}
+}
 
 function isNativeAndroid() {
   return Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
@@ -742,9 +764,8 @@ export async function mobileProcessDownload({
         'https://cobalt.hostux.net/'
       ];
 
-      // 3. Orden inteligente: Si un espejo funcionó previamente, se prueba primero
-      let preferredInstance = '';
-      try { preferredInstance = globalThis.localStorage?.getItem(PREFERRED_MIRROR_KEY) || ''; } catch {}
+      // 3. Orden inteligente: Si un espejo funcionó previamente, se prueba primero (usando Capacitor Preferences)
+      const preferredInstance = await getPreferredCobaltMirror();
 
       const cobaltInstances = [...baseCobaltInstances];
       if (preferredInstance && cobaltInstances.includes(preferredInstance)) {
@@ -800,7 +821,7 @@ export async function mobileProcessDownload({
 
         if (resolvedFromMirror) {
           directDownloadUrl = resolvedFromMirror;
-          try { globalThis.localStorage?.setItem(PREFERRED_MIRROR_KEY, instance); } catch {}
+          await setPreferredCobaltMirror(instance);
           break;
         }
       }
