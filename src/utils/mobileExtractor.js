@@ -12,8 +12,9 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
 const API_STORAGE_KEY = 'mc_music_mobile_api_base';
-const INFO_TIMEOUT_MS = 6_000;
-const TIKWM_TIMEOUT_MS = 6_000;
+const PREFERRED_MIRROR_KEY = 'mc_music_preferred_cobalt_mirror';
+const INFO_TIMEOUT_MS = 14_000;
+const TIKWM_TIMEOUT_MS = 14_000;
 const DOWNLOAD_POLL_MS = 450;
 
 const MediaDownloader = registerPlugin('MediaDownloader');
@@ -728,8 +729,8 @@ export async function mobileProcessDownload({
       });
       directDownloadUrl = `${customOrigin}/api/download?${params.toString()}`;
     } else {
-      // Intentar resolver via espejo de Cobalt
-      const cobaltInstances = [
+      // Intentar resolver via espejo de Cobalt con ordenación inteligente y reintentos
+      const baseCobaltInstances = [
         'https://api.cobalt.tools/',
         'https://cobalt.qtfy.dev/',
         'https://cobalt.fast-serve.net/',
@@ -740,28 +741,67 @@ export async function mobileProcessDownload({
         'https://rue-cobalt.xenon.zone/',
         'https://cobalt.hostux.net/'
       ];
+
+      // 3. Orden inteligente: Si un espejo funcionó previamente, se prueba primero
+      let preferredInstance = '';
+      try { preferredInstance = globalThis.localStorage?.getItem(PREFERRED_MIRROR_KEY) || ''; } catch {}
+
+      const cobaltInstances = [...baseCobaltInstances];
+      if (preferredInstance && cobaltInstances.includes(preferredInstance)) {
+        cobaltInstances.sort((a, b) => (a === preferredInstance ? -1 : b === preferredInstance ? 1 : 0));
+      }
+
+      const overallStart = Date.now();
+      let testedCount = 0;
+
       for (const instance of cobaltInstances) {
-        try {
-          const cobaltRes = await fetch(instance, {
-            method: 'POST',
-            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              url: videoInfo.url,
-              videoQuality: resolution || '720',
-              downloadMode: format === 'mp3' ? 'audio' : 'auto',
-              audioFormat: 'mp3'
-            }),
-            signal
-          });
-          if (cobaltRes.ok) {
-            const cData = await cobaltRes.json();
-            if (cData.url) {
-              directDownloadUrl = cData.url;
+        // Límite global: Máximo 4 espejos probados o 45 segundos de tiempo total acumulado
+        if (testedCount >= 4 || (Date.now() - overallStart) >= 45_000) break;
+        if (signal?.aborted) break;
+
+        testedCount++;
+        let resolvedFromMirror = '';
+
+        // 2. Reintentos con backoff (máximo 2 intentos por espejo para errores temporales)
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          if (signal?.aborted) break;
+          try {
+            const cobaltRes = await fetch(instance, {
+              method: 'POST',
+              headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                url: videoInfo.url,
+                videoQuality: resolution || '720',
+                downloadMode: format === 'mp3' ? 'audio' : 'auto',
+                audioFormat: 'mp3'
+              }),
+              signal
+            });
+
+            if (cobaltRes.ok) {
+              const cData = await cobaltRes.json();
+              if (cData.url) {
+                resolvedFromMirror = cData.url;
+                break;
+              }
+            } else if ([403, 429, 502, 503, 504].includes(cobaltRes.status) && attempt === 1) {
+              // Esperar 2.5s antes del reintento temporal
+              await delay(2500, signal);
+            } else {
               break;
             }
+          } catch (err) {
+            if (signal?.aborted) break;
+            if (attempt === 1) {
+              await delay(2500, signal).catch(() => {});
+            }
           }
-        } catch (err) {
-          console.warn(`[MC-Music] Espejo Cobalt falló (${instance}):`, err.message);
+        }
+
+        if (resolvedFromMirror) {
+          directDownloadUrl = resolvedFromMirror;
+          try { globalThis.localStorage?.setItem(PREFERRED_MIRROR_KEY, instance); } catch {}
+          break;
         }
       }
     }
@@ -780,7 +820,7 @@ export async function mobileProcessDownload({
   }
 
   if (!isDirectResolved) {
-    throw new Error("No se pudo obtener el enlace de descarga directa multimedia. Todos los servidores de resolución están fuera de línea o saturados. Inténtalo de nuevo.");
+    throw new Error("No se pudo obtener el enlace de descarga. Todos los servidores de resolución están fuera de línea o saturados. Inténtalo de nuevo en unos minutos.");
   }
 
   if (isNativeAndroid()) {
