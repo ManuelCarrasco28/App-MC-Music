@@ -165,8 +165,8 @@ public class MediaDownloaderPlugin extends Plugin {
                 long totalBytes = conn.getContentLength();
                 directState.put("totalBytes", totalBytes);
 
-                // 3. Crear el archivo de destino en DCIM/MC-Music
-                String dirType = mimeType.startsWith("video") ? Environment.DIRECTORY_DCIM : Environment.DIRECTORY_MUSIC;
+                // 3. Crear el archivo de destino en Movies/MC-Music o Music/MC-Music
+                String dirType = mimeType.startsWith("video") ? Environment.DIRECTORY_MOVIES : Environment.DIRECTORY_MUSIC;
                 File publicDir = Environment.getExternalStoragePublicDirectory(dirType);
                 File mcMusicDir = new File(publicDir, "MC-Music");
                 if (!mcMusicDir.exists()) mcMusicDir.mkdirs();
@@ -749,7 +749,7 @@ public class MediaDownloaderPlugin extends Plugin {
                                 if (displayName != null && !displayName.isEmpty()) {
                                     String mimeType = getString(cursor, DownloadManager.COLUMN_MEDIA_TYPE, "");
                                     String dirType = (mimeType != null && mimeType.startsWith("video"))
-                                        ? Environment.DIRECTORY_DCIM
+                                        ? Environment.DIRECTORY_MOVIES
                                         : Environment.DIRECTORY_MUSIC;
                                     File dir = new File(Environment.getExternalStoragePublicDirectory(dirType), "MC-Music");
                                     File file = new File(dir, displayName);

@@ -717,11 +717,15 @@ export async function mobileProcessDownload({
     } else {
       // Intentar resolver via espejo de Cobalt
       const cobaltInstances = [
+        'https://api.cobalt.tools/',
+        'https://cobalt.qtfy.dev/',
+        'https://cobalt.fast-serve.net/',
+        'https://cobalt.stream/',
+        'https://cobalt.cn.eu.org/',
         'https://dog.kittycat.boo/',
         'https://cobaltapi.kittycat.boo/',
         'https://rue-cobalt.xenon.zone/',
-        'https://cobalt.hostux.net/',
-        'https://api.cobalt.tools/'
+        'https://cobalt.hostux.net/'
       ];
       for (const instance of cobaltInstances) {
         try {
