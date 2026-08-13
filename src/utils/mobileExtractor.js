@@ -12,8 +12,8 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
 const API_STORAGE_KEY = 'mc_music_mobile_api_base';
-const INFO_TIMEOUT_MS = 12_000;
-const TIKWM_TIMEOUT_MS = 12_000;
+const INFO_TIMEOUT_MS = 6_000;
+const TIKWM_TIMEOUT_MS = 6_000;
 const DOWNLOAD_POLL_MS = 450;
 
 const MediaDownloader = registerPlugin('MediaDownloader');
