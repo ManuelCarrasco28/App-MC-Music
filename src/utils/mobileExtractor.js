@@ -607,7 +607,7 @@ async function downloadWithAndroidManager({ downloadUrl, fileName, mimeType, job
       }
 
       if (status.state === 'successful') {
-        if (downloadedBytes <= 1024) {
+        if (downloadedBytes <= 51_200) {
           throw new Error('El servidor rechazó la descarga o envió un archivo vacío.');
         }
         onProgress(100);
@@ -665,7 +665,7 @@ async function downloadWithFetch({ downloadUrl, fileName, jobId, onProgress, onS
     }
 
     const bytes = concatChunks(chunks, receivedBytes);
-    if (bytes.byteLength <= 1024) {
+    if (bytes.byteLength <= 51_200) {
       throw new Error('El archivo descargado está vacío o es inválido.');
     }
 
@@ -775,15 +775,13 @@ export async function mobileProcessDownload({
       const disabledYtMirrors = isYouTube ? await getDisabledYtMirrors() : [];
 
       const baseCobaltInstances = [
+        'https://rue-cobalt.xenon.zone/',
         'https://api.cobalt.tools/',
-        'https://cobalt.qtfy.dev/',
+        'https://cobalt.hostux.net/',
         'https://cobalt.fast-serve.net/',
         'https://cobalt.stream/',
-        'https://cobalt.cn.eu.org/',
-        'https://dog.kittycat.boo/',
-        'https://cobaltapi.kittycat.boo/',
-        'https://rue-cobalt.xenon.zone/',
-        'https://cobalt.hostux.net/'
+        'https://cobalt.qtfy.dev/',
+        'https://cobalt.cn.eu.org/'
       ];
 
       // Filtrar espejos que ya sabemos que deshabilitaron YouTube

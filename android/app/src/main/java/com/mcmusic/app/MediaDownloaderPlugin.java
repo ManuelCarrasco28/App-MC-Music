@@ -203,6 +203,13 @@ public class MediaDownloaderPlugin extends Plugin {
                 }
                 conn.disconnect();
 
+                if (targetFile.length() <= 51200) {
+                    try { targetFile.delete(); } catch (Exception ignored) {}
+                    directState.put("state", "failed");
+                    directState.put("message", "El archivo descargado esta vacio o fue rechazado por el servidor.");
+                    return;
+                }
+
                 // 5. Indexar en la Galería (MediaStore)
                 ContentValues values = new ContentValues();
                 values.put(MediaStore.MediaColumns.DISPLAY_NAME, targetFile.getName());
@@ -517,7 +524,7 @@ public class MediaDownloaderPlugin extends Plugin {
             String localUri = getString(cursor, DownloadManager.COLUMN_LOCAL_URI, "");
 
             if (status == DownloadManager.STATUS_SUCCESSFUL) {
-                if (downloadedBytes > 0 && downloadedBytes <= 1024) {
+                if (downloadedBytes <= 51200) {
                     JSObject blocked = new JSObject();
                     blocked.put("state", "failed");
                     blocked.put("message", "El archivo descargado esta vacio o fue rechazado por el servidor del video.");
