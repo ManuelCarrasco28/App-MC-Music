@@ -14,6 +14,7 @@ import { Preferences } from '@capacitor/preferences';
 
 const API_STORAGE_KEY = 'mc_music_mobile_api_base';
 const PREFERRED_MIRROR_KEY = 'mc_music_preferred_cobalt_mirror';
+const DISABLED_YT_MIRRORS_KEY = 'mc_music_disabled_youtube_mirrors';
 const INFO_TIMEOUT_MS = 14_000;
 const TIKWM_TIMEOUT_MS = 14_000;
 const DOWNLOAD_POLL_MS = 450;
@@ -38,6 +39,24 @@ async function setPreferredCobaltMirror(instanceUrl) {
   } catch {}
   try {
     globalThis.localStorage?.setItem(PREFERRED_MIRROR_KEY, instanceUrl);
+  } catch {}
+}
+
+async function getDisabledYtMirrors() {
+  try {
+    const { value } = await Preferences.get({ key: DISABLED_YT_MIRRORS_KEY });
+    if (value) return JSON.parse(value);
+  } catch {}
+  return [];
+}
+
+async function addDisabledYtMirror(instanceUrl) {
+  try {
+    const current = await getDisabledYtMirrors();
+    if (!current.includes(instanceUrl)) {
+      current.push(instanceUrl);
+      await Preferences.set({ key: DISABLED_YT_MIRRORS_KEY, value: JSON.stringify(current) });
+    }
   } catch {}
 }
 
@@ -752,6 +771,9 @@ export async function mobileProcessDownload({
       directDownloadUrl = `${customOrigin}/api/download?${params.toString()}`;
     } else {
       // Intentar resolver via espejo de Cobalt con ordenación inteligente y reintentos
+      const isYouTube = meta.platform === 'youtube';
+      const disabledYtMirrors = isYouTube ? await getDisabledYtMirrors() : [];
+
       const baseCobaltInstances = [
         'https://api.cobalt.tools/',
         'https://cobalt.qtfy.dev/',
@@ -764,16 +786,22 @@ export async function mobileProcessDownload({
         'https://cobalt.hostux.net/'
       ];
 
+      // Filtrar espejos que ya sabemos que deshabilitaron YouTube
+      const activeInstances = isYouTube
+        ? baseCobaltInstances.filter((inst) => !disabledYtMirrors.includes(inst))
+        : baseCobaltInstances;
+
       // 3. Orden inteligente: Si un espejo funcionó previamente, se prueba primero (usando Capacitor Preferences)
       const preferredInstance = await getPreferredCobaltMirror();
 
-      const cobaltInstances = [...baseCobaltInstances];
+      const cobaltInstances = [...activeInstances];
       if (preferredInstance && cobaltInstances.includes(preferredInstance)) {
         cobaltInstances.sort((a, b) => (a === preferredInstance ? -1 : b === preferredInstance ? 1 : 0));
       }
 
       const overallStart = Date.now();
       let testedCount = 0;
+      let youtubeDisabledEncountered = false;
 
       for (const instance of cobaltInstances) {
         // Límite global: Máximo 4 espejos probados o 45 segundos de tiempo total acumulado
@@ -799,12 +827,27 @@ export async function mobileProcessDownload({
               signal
             });
 
-            if (cobaltRes.ok) {
-              const cData = await cobaltRes.json();
-              if (cData.url) {
-                resolvedFromMirror = cData.url;
-                break;
-              }
+            const resText = await cobaltRes.text().catch(() => '');
+            let cData = null;
+            try { cData = JSON.parse(resText); } catch {}
+
+            // Detectar si el espejo deshabilitó explícitamente la descarga de YouTube
+            const errorStr = String(cData?.error?.code || cData?.text || resText || '').toLowerCase();
+            const isYtDisabled = isYouTube && (
+              errorStr.includes('disabled') ||
+              errorStr.includes('auth.jwt.missing') ||
+              errorStr.includes('youtube')
+            );
+
+            if (isYtDisabled) {
+              youtubeDisabledEncountered = true;
+              await addDisabledYtMirror(instance);
+              break; // Pasar inmediatamente al siguiente espejo sin reintentar este
+            }
+
+            if (cobaltRes.ok && cData?.url) {
+              resolvedFromMirror = cData.url;
+              break;
             } else if ([403, 429, 502, 503, 504].includes(cobaltRes.status) && attempt === 1) {
               // Esperar 2.5s antes del reintento temporal
               await delay(2500, signal);
@@ -825,6 +868,10 @@ export async function mobileProcessDownload({
           break;
         }
       }
+
+      if (!directDownloadUrl && isYouTube && youtubeDisabledEncountered) {
+        throw new Error('La descarga de YouTube no está disponible actualmente sin conexión a PC. Conecta tu PC en Ajustes para descargar videos de YouTube.');
+      }
     }
   }
 
@@ -841,7 +888,10 @@ export async function mobileProcessDownload({
   }
 
   if (!isDirectResolved) {
-    throw new Error("No se pudo obtener el enlace de descarga. Todos los servidores de resolución están fuera de línea o saturados. Inténtalo de nuevo en unos minutos.");
+    if (meta.platform === 'youtube') {
+      throw new Error('La descarga de YouTube no está disponible actualmente sin conexión a PC. Conecta tu PC en Ajustes para descargar videos de YouTube.');
+    }
+    throw new Error('No se pudo obtener el enlace de descarga. Todos los servidores de resolución están fuera de línea o saturados. Inténtalo de nuevo en unos minutos.');
   }
 
   if (isNativeAndroid()) {
