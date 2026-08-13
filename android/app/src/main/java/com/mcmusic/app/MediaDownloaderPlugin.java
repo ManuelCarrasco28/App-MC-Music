@@ -390,10 +390,11 @@ public class MediaDownloaderPlugin extends Plugin {
     }
 
     private DownloadManager.Request buildRequest(Uri uri, String title, String mimeType, String fileName, JSObject headers, String rawUrl, String platform) {
-        // En DownloadManager, el 1er argumento debe ser una constante raiz valida de Environment (ej. DIRECTORY_DCIM o DIRECTORY_MUSIC)
-        // y el 2do argumento es la sub-ruta dentro de esa carpeta ("MC-Music/" + fileName).
+        // Para garantizar indexación inmediata en la Galería de CUALQUIER fabricante Android (Samsung, Xiaomi, Motorola, Huawei, Pixel):
+        // - Los VIDEOS se guardan en Environment.DIRECTORY_MOVIES + "/MC-Music" (o DIRECTORY_DCIM)
+        // - Los AUDIOS MP3 se guardan en Environment.DIRECTORY_MUSIC + "/MC-Music"
         String dirType = (mimeType != null && mimeType.startsWith("video"))
-            ? Environment.DIRECTORY_DCIM
+            ? Environment.DIRECTORY_MOVIES
             : Environment.DIRECTORY_MUSIC;
         String subPath = "MC-Music/" + fileName;
 
@@ -778,7 +779,7 @@ public class MediaDownloaderPlugin extends Plugin {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         values.put(MediaStore.MediaColumns.IS_PENDING, 0);
                         if (mimeType.startsWith("video")) {
-                            values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DCIM + "/MC-Music");
+                            values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/MC-Music");
                         } else {
                             values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_MUSIC + "/MC-Music");
                         }
