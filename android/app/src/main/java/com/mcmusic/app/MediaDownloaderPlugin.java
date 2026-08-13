@@ -140,10 +140,21 @@ public class MediaDownloaderPlugin extends Plugin {
                 conn.setConnectTimeout(15000);
                 conn.setReadTimeout(15000);
 
-                // Cabeceras indispensables
+                // Cabeceras indispensables según dominio de destino
                 conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36");
-                conn.setRequestProperty("Referer", "https://www.tiktok.com/");
-                
+                String lowerUrl = rawUrl.toLowerCase(Locale.ROOT);
+                if (lowerUrl.contains("tikwm.com")) {
+                    conn.setRequestProperty("Referer", "https://www.tikwm.com/");
+                } else if (lowerUrl.contains("tiktok.com") || lowerUrl.contains("akamaized") || lowerUrl.contains("byteoversea") || lowerUrl.contains("ibyteimg")) {
+                    conn.setRequestProperty("Referer", "https://www.tiktok.com/");
+                } else if (lowerUrl.contains("youtube") || lowerUrl.contains("googlevideo")) {
+                    conn.setRequestProperty("Referer", "https://www.youtube.com/");
+                } else if (lowerUrl.contains("instagram") || lowerUrl.contains("cdninstagram")) {
+                    conn.setRequestProperty("Referer", "https://www.instagram.com/");
+                } else if (lowerUrl.contains("facebook") || lowerUrl.contains("fbcdn")) {
+                    conn.setRequestProperty("Referer", "https://www.facebook.com/");
+                }
+
                 // Añadir cabeceras adicionales si existen
                 if (headers != null) {
                     Iterator<String> headerNames = headers.keys();
@@ -430,19 +441,17 @@ public class MediaDownloaderPlugin extends Plugin {
             request.addRequestHeader("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36");
         }
         if (!hasReferer) {
-            if ("tiktok".equals(platform)) {
+            String lowerUrl = rawUrl.toLowerCase(Locale.ROOT);
+            if (lowerUrl.contains("tikwm.com")) {
+                request.addRequestHeader("Referer", "https://www.tikwm.com/");
+            } else if (lowerUrl.contains("tiktok.com") || lowerUrl.contains("akamaized") || lowerUrl.contains("byteoversea") || lowerUrl.contains("ibyteimg")) {
                 request.addRequestHeader("Referer", "https://www.tiktok.com/");
-            } else {
-                String lowerUrl = rawUrl.toLowerCase(Locale.ROOT);
-                if (lowerUrl.contains("tiktok") || lowerUrl.contains("akamaized") || lowerUrl.contains("tikwm") || lowerUrl.contains("byteoversea") || lowerUrl.contains("ibyteimg")) {
-                    request.addRequestHeader("Referer", "https://www.tiktok.com/");
-                } else if (lowerUrl.contains("youtube") || lowerUrl.contains("googlevideo")) {
-                    request.addRequestHeader("Referer", "https://www.youtube.com/");
-                } else if (lowerUrl.contains("instagram") || lowerUrl.contains("cdninstagram")) {
-                    request.addRequestHeader("Referer", "https://www.instagram.com/");
-                } else if (lowerUrl.contains("facebook") || lowerUrl.contains("fbcdn")) {
-                    request.addRequestHeader("Referer", "https://www.facebook.com/");
-                }
+            } else if (lowerUrl.contains("youtube") || lowerUrl.contains("googlevideo")) {
+                request.addRequestHeader("Referer", "https://www.youtube.com/");
+            } else if (lowerUrl.contains("instagram") || lowerUrl.contains("cdninstagram")) {
+                request.addRequestHeader("Referer", "https://www.instagram.com/");
+            } else if (lowerUrl.contains("facebook") || lowerUrl.contains("fbcdn")) {
+                request.addRequestHeader("Referer", "https://www.facebook.com/");
             }
         }
 

@@ -252,33 +252,7 @@ async function fetchJson(url, { signal, timeoutMs = INFO_TIMEOUT_MS, ...options 
    EXTRACTORES AUTÓNOMOS DE METADATOS Y MEDIOS POR PLATAFORMA
    ========================================================================== */
 
-async function resolveYouTubeInvidious(videoId, format, signal) {
-  if (!videoId) return '';
-  const instances = [
-    'https://inv.tux.pizza',
-    'https://invidious.nerdvpn.de',
-    'https://vid.puffyan.us',
-    'https://invidious.drgns.space',
-    'https://yt.drgnz.club'
-  ];
-  for (const base of instances) {
-    try {
-      const data = await fetchJson(`${base}/api/v1/videos/${videoId}`, { signal, timeoutMs: 5_000 });
-      if (data) {
-        if (format === 'mp4') {
-          const mp4Stream = data.formatStreams?.find((s) => s.container === 'mp4' && s.url)
-            || data.formatStreams?.[0];
-          if (mp4Stream?.url) return mp4Stream.url;
-        } else {
-          const audioStream = data.adaptiveFormats?.find((s) => String(s.type).includes('audio') && s.url)
-            || data.formatStreams?.[0];
-          if (audioStream?.url) return audioStream.url;
-        }
-      }
-    } catch {}
-  }
-  return '';
-}
+
 
 async function getTikTokClientInfo(cleanUrl, meta, signal) {
   const endpoints = [
@@ -732,18 +706,6 @@ export async function mobileProcessDownload({
       }
     } catch (err) {
       console.warn('[MC-Music] Error cliente Facebook:', err.message);
-    }
-  } else if (meta.platform === 'youtube' && !customOrigin) {
-    try {
-      const videoId = videoInfo.url.match(/(?:v=|youtu\.be\/|shorts\/)([a-zA-Z0-9_-]{11})/)?.[1] || '';
-      if (videoId) {
-        const invUrl = await resolveYouTubeInvidious(videoId, format, signal);
-        if (invUrl) {
-          directDownloadUrl = invUrl;
-        }
-      }
-    } catch (err) {
-      console.warn('[MC-Music] Error cliente YouTube Invidious:', err.message);
     }
   }
 
