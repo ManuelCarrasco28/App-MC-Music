@@ -651,6 +651,8 @@ export async function mobileProcessDownload({
   if (!['mp3', 'mp4'].includes(format)) throw new Error('Formato de descarga no valido.');
   if (signal?.aborted) throw new DOMException('Descarga cancelada.', 'AbortError');
 
+  const meta = detectPlatformClient(videoInfo.url);
+
   let latestProgress = 0;
   const reportProgress = (value) => {
     latestProgress = Math.max(latestProgress, Math.max(0, Math.min(100, Number(value) || 0)));

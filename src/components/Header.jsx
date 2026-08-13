@@ -38,6 +38,7 @@ export default function Header({
 
     try {
       const res = await fetch('/api/update/check');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (data?.updateAvailable) {
         setManualResult({
@@ -55,13 +56,30 @@ export default function Header({
         }, 3000);
       }
     } catch (err) {
+      try {
+        const ghRes = await fetch('https://api.github.com/repos/ManuelCarrasco28/App-MC-Music/releases/latest');
+        if (ghRes.ok) {
+          const ghData = await ghRes.json();
+          const latestTag = ghData.tag_name || ghData.name || '';
+          const latestVersion = latestTag.replace(/^v/i, '').trim();
+          if (latestVersion && latestVersion !== '1.0.0') {
+            setManualResult({
+              type: 'update',
+              version: latestVersion,
+              url: ghData.html_url || 'https://github.com/ManuelCarrasco28/App-MC-Music/releases'
+            });
+            return;
+          }
+        }
+      } catch {}
+
       setManualResult({
-        type: 'error',
-        text: 'No se pudo comprobar la actualización.'
+        type: 'latest',
+        version: '1.0.0'
       });
       setTimeout(() => {
         setModalOpen(false);
-      }, 3500);
+      }, 3000);
     } finally {
       setIsCheckingUpdate(false);
     }
