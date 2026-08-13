@@ -323,18 +323,17 @@ public class MediaDownloaderPlugin extends Plugin {
     }
 
     private String resolveRedirects(String urlString, JSObject headers, String platform) {
-        int maxRedirects = 6;
+        int maxRedirects = 3;
         String currentUrl = urlString;
         for (int i = 0; i < maxRedirects; i++) {
             try {
                 java.net.URL url = new java.net.URL(currentUrl);
                 java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
-                conn.setInstanceFollowRedirects(false); // Manual para capturar y replicar headers personalizados
-                conn.setRequestMethod("GET");
-                conn.setConnectTimeout(8000);
-                conn.setReadTimeout(8000);
+                conn.setInstanceFollowRedirects(false);
+                conn.setRequestMethod("HEAD");
+                conn.setConnectTimeout(2500);
+                conn.setReadTimeout(2500);
 
-                // Agregar cabeceras personalizadas provistas
                 if (headers != null) {
                     Iterator<String> headerNames = headers.keys();
                     while (headerNames.hasNext()) {
@@ -346,10 +345,8 @@ public class MediaDownloaderPlugin extends Plugin {
                     }
                 }
 
-                // Forzar User-Agent móvil válido
                 conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36");
 
-                // Configurar Referer según la plataforma o por inspección de URL
                 if ("tiktok".equals(platform)) {
                     conn.setRequestProperty("Referer", "https://www.tiktok.com/");
                 } else {
@@ -382,7 +379,7 @@ public class MediaDownloaderPlugin extends Plugin {
                     break;
                 }
             } catch (Exception e) {
-                android.util.Log.w("MediaDownloader", "Fallo al resolver redirección en Java: " + currentUrl + " -> " + e.getMessage());
+                android.util.Log.w("MediaDownloader", "Fallo ligero al resolver redirección: " + e.getMessage());
                 break;
             }
         }

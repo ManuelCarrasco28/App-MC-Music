@@ -252,11 +252,52 @@ async function fetchJson(url, { signal, timeoutMs = INFO_TIMEOUT_MS, ...options 
    EXTRACTORES AUTÓNOMOS DE METADATOS Y MEDIOS POR PLATAFORMA
    ========================================================================== */
 
+async function resolveYouTubeInvidious(videoId, format, signal) {
+  if (!videoId) return '';
+  const instances = [
+    'https://inv.tux.pizza',
+    'https://invidious.nerdvpn.de',
+    'https://vid.puffyan.us',
+    'https://invidious.drgns.space',
+    'https://yt.drgnz.club'
+  ];
+  for (const base of instances) {
+    try {
+      const data = await fetchJson(`${base}/api/v1/videos/${videoId}`, { signal, timeoutMs: 5_000 });
+      if (data) {
+        if (format === 'mp4') {
+          const mp4Stream = data.formatStreams?.find((s) => s.container === 'mp4' && s.url)
+            || data.formatStreams?.[0];
+          if (mp4Stream?.url) return mp4Stream.url;
+        } else {
+          const audioStream = data.adaptiveFormats?.find((s) => String(s.type).includes('audio') && s.url)
+            || data.formatStreams?.[0];
+          if (audioStream?.url) return audioStream.url;
+        }
+      }
+    } catch {}
+  }
+  return '';
+}
+
 async function getTikTokClientInfo(cleanUrl, meta, signal) {
-  const endpoint = `https://www.tikwm.com/api/?url=${encodeURIComponent(cleanUrl)}&hd=1`;
-  const resData = await fetchJson(endpoint, { signal, timeoutMs: TIKWM_TIMEOUT_MS });
-  if (resData.code !== 0 || !resData.data) {
-    throw new Error(resData.msg || 'TikTok no devolvio informacion compatible.');
+  const endpoints = [
+    `https://www.tikwm.com/api/?url=${encodeURIComponent(cleanUrl)}&hd=1`,
+    `https://tikwm.com/api/?url=${encodeURIComponent(cleanUrl)}&hd=1`,
+    `https://api.tikwm.com/api/?url=${encodeURIComponent(cleanUrl)}&hd=1`
+  ];
+  let resData = null;
+  let lastErr = null;
+  for (const endpoint of endpoints) {
+    try {
+      resData = await fetchJson(endpoint, { signal, timeoutMs: 12_000 });
+      if (resData?.code === 0 && resData?.data) break;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  if (!resData || resData.code !== 0 || !resData.data) {
+    throw new Error(resData?.msg || lastErr?.message || 'TikTok no devolvio informacion compatible.');
   }
 
   const data = resData.data;
@@ -676,8 +717,6 @@ export async function mobileProcessDownload({
   if (meta.platform === 'tiktok') {
     try {
       const freshData = await getTikTokClientInfo(videoInfo.url, meta, signal);
-      // Si no hay un servidor backend para transcodificar, obligamos a descargar la versión compatible (H.264)
-      // para evitar que el reproductor del celular muestre "video no compatible" al bajar el HD (H.265/HEVC).
       const useHD = format === 'mp4' && String(resolution) === '1080' && Boolean(customOrigin);
       directDownloadUrl = format === 'mp4'
         ? (useHD ? (freshData.hdMp4 || freshData.directMp4) : freshData.directMp4)
@@ -693,6 +732,18 @@ export async function mobileProcessDownload({
       }
     } catch (err) {
       console.warn('[MC-Music] Error cliente Facebook:', err.message);
+    }
+  } else if (meta.platform === 'youtube' && !customOrigin) {
+    try {
+      const videoId = videoInfo.url.match(/(?:v=|youtu\.be\/|shorts\/)([a-zA-Z0-9_-]{11})/)?.[1] || '';
+      if (videoId) {
+        const invUrl = await resolveYouTubeInvidious(videoId, format, signal);
+        if (invUrl) {
+          directDownloadUrl = invUrl;
+        }
+      }
+    } catch (err) {
+      console.warn('[MC-Music] Error cliente YouTube Invidious:', err.message);
     }
   }
 
