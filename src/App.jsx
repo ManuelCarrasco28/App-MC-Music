@@ -149,8 +149,10 @@ export default function App() {
     }
   });
 
+  const isConfigLoadedRef = useRef(false);
+
   const saveDesktopSettings = (updatedFields) => {
-    if (isNativeMobile) return;
+    if (isNativeMobile || !isConfigLoadedRef.current) return;
     fetch('/api/settings/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -171,7 +173,10 @@ export default function App() {
           if (Array.isArray(hist) && hist.length > 0) setHistory(hist);
         }
       })
-      .catch((err) => console.warn('[App] No se pudo cargar configuración de disco:', err.message));
+      .catch((err) => console.warn('[App] No se pudo cargar configuración de disco:', err.message))
+      .finally(() => {
+        isConfigLoadedRef.current = true;
+      });
   }, [isNativeMobile]);
 
   useEffect(() => {

@@ -62,10 +62,21 @@ async function createMainWindow() {
     ? `http://127.0.0.1:${localPort}`
     : (process.env.VITE_DEV_SERVER_URL || 'http://127.0.0.1:3000');
 
-  try {
-    await mainWindow.loadURL(appUrl);
-  } catch (error) {
-    dialog.showErrorBox('MC-Music no pudo iniciar', error.message);
+  let loaded = false;
+  let lastError = null;
+  for (let attempt = 1; attempt <= 12; attempt++) {
+    try {
+      await mainWindow.loadURL(appUrl);
+      loaded = true;
+      break;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    }
+  }
+
+  if (!loaded) {
+    dialog.showErrorBox('MC-Music no pudo iniciar', lastError?.message || 'No se pudo conectar al servidor local.');
     app.quit();
   }
 }
