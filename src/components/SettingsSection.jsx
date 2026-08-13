@@ -135,7 +135,7 @@ export default function SettingsSection({
           </div>
           <div>
             <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.3rem', fontWeight: 700, color: 'var(--accent-cyan)' }}>
-              Carpeta para Música (Archivos MP3) <span style={{ color: '#ff758f', fontSize: '1rem' }}>*Obligatorio</span>
+              Carpeta para Música (Archivos MP3) <span style={{ color: '#ff758f', fontSize: '1rem' }}>*Configurable</span>
             </h3>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
               Lugar donde se guardarán automáticamente tus descargas de solo audio.
@@ -187,7 +187,7 @@ export default function SettingsSection({
           </div>
           <div>
             <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.3rem', fontWeight: 700, color: '#c084fc' }}>
-              Carpeta para Videos (Archivos MP4) <span style={{ color: '#ff758f', fontSize: '1rem' }}>*Obligatorio</span>
+              Carpeta para Videos (Archivos MP4) <span style={{ color: '#ff758f', fontSize: '1rem' }}>*Configurable</span>
             </h3>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
               Lugar donde se guardarán automáticamente tus descargas de video.
