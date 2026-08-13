@@ -27,7 +27,18 @@ export default function VideoCard({ videoInfo, onOpenOriginal }) {
     ? videoInfo.thumbnails
     : [videoInfo.thumbnail, videoInfo.cover, videoInfo.originCover].filter(Boolean);
 
-  const availableThumbs = rawThumbs.map(getSafeThumbUrl).filter(Boolean);
+  const expandedThumbs = [];
+  for (const item of rawThumbs) {
+    if (typeof item === 'string' && item.trim()) {
+      expandedThumbs.push(item.trim());
+      if (item.includes('i.ytimg.com') && item.includes('maxresdefault.jpg')) {
+        expandedThumbs.push(item.replace('maxresdefault.jpg', 'hqdefault.jpg'));
+        expandedThumbs.push(item.replace('maxresdefault.jpg', 'mqdefault.jpg'));
+      }
+    }
+  }
+
+  const availableThumbs = [...new Set(expandedThumbs.map(getSafeThumbUrl))].filter(Boolean);
 
   useEffect(() => {
     setThumbIndex(0);
@@ -61,7 +72,6 @@ export default function VideoCard({ videoInfo, onOpenOriginal }) {
             alt={`Miniatura de ${videoInfo.title}`}
             className="thumbnail-img"
             referrerPolicy="no-referrer"
-            crossOrigin="anonymous"
             onError={handleImageError}
           />
         ) : (

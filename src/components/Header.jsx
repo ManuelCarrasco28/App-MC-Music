@@ -25,7 +25,8 @@ export default function Header({
     ? 'App móvil lista'
     : STATUS_LABELS[serverStatus] || STATUS_LABELS.checking;
 
-  const handleCheckUpdateClick = async () => {
+  const handleCheckUpdateClick = async (e) => {
+    e.stopPropagation();
     if (modalOpen && !isCheckingUpdate) {
       setModalOpen(false);
       return;
@@ -70,7 +71,7 @@ export default function Header({
 
   return (
     <header className="app-header glass-panel" style={{ position: 'relative' }}>
-      {/* 1. LOGO Y NOMBRE CON VERSIÓN v1.0.0 */}
+      {/* 1. MARCA LOGO Y NOMBRE CON VERSIÓN v1.0.0 */}
       <motion.div
         className="brand"
         initial={{ opacity: 0, x: -20 }}
@@ -104,7 +105,7 @@ export default function Header({
         </div>
       </motion.div>
 
-      {/* 2. NAVEGACIÓN PRINCIPAL (SOLO LAS 2 PESTAÑAS) */}
+      {/* 2. NAVEGACIÓN PRINCIPAL (SOLO LAS 2 PESTAÑAS PRINCIPALES) */}
       {showDesktopSettings && (
         <nav className="header-navigation" aria-label="Navegación principal">
           <button
@@ -127,59 +128,54 @@ export default function Header({
         </nav>
       )}
 
-      {/* 3. LADO DERECHO: ESTADO DEL SERVIDOR + ÍCONO DE ACTUALIZACIONES SOLICITADO */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-        <motion.div
-          className={`server-status ${serverStatus}`}
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.4 }}
-          title={statusLabel}
-        >
-          <span className="status-dot" />
-          <span>{statusLabel}</span>
-        </motion.div>
+      {/* 3. LADO DERECHO: PÍLDORA DE ESTADO E ÍCONO INTEGRADO ELEGANTEMENTE */}
+      <motion.div
+        className={`server-status ${serverStatus}`}
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.4 }}
+        title="Haz clic para comprobar actualizaciones"
+        onClick={handleCheckUpdateClick}
+        style={{
+          cursor: 'pointer',
+          userSelect: 'none',
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.55rem',
+          padding: '0.4rem 0.9rem',
+          background: hasUpdate ? 'rgba(16, 185, 129, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+          borderColor: hasUpdate ? 'rgba(16, 185, 129, 0.5)' : undefined
+        }}
+      >
+        <span className="status-dot" style={{ backgroundColor: hasUpdate ? '#10b981' : undefined }} />
+        <span style={{ color: hasUpdate ? '#10b981' : undefined, fontWeight: hasUpdate ? 700 : undefined }}>
+          {hasUpdate ? `¡v${updateInfo?.latestVersion || manualResult?.version} disponible!` : statusLabel}
+        </span>
 
-        {/* ÍCONO DE BUSCAR ACTUALIZACIÓN AL LADO DE SERVICIO ACTIVO */}
-        <button
-          type="button"
-          onClick={handleCheckUpdateClick}
-          style={{
-            position: 'relative',
-            display: 'flex',
-            alignItems: 'center',
-            justify: 'center',
-            width: '32px',
-            height: '32px',
-            borderRadius: '50%',
-            background: hasUpdate ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.06)',
-            border: hasUpdate ? '1px solid rgba(16, 185, 129, 0.5)' : '1px solid rgba(255, 255, 255, 0.1)',
-            color: hasUpdate ? '#10b981' : 'var(--text-muted)',
-            cursor: 'pointer',
-            transition: 'all 0.2s ease'
-          }}
-          title="Buscar actualizaciones"
-        >
-          <RefreshCw size={15} className={isCheckingUpdate ? 'spin' : ''} />
+        <RefreshCw
+          size={13}
+          className={isCheckingUpdate ? 'spin' : ''}
+          style={{ color: hasUpdate ? '#10b981' : 'var(--text-muted)', marginLeft: '2px' }}
+        />
 
-          {hasUpdate && (
-            <span
-              style={{
-                position: 'absolute',
-                top: '0px',
-                right: '0px',
-                width: '8px',
-                height: '8px',
-                borderRadius: '50%',
-                backgroundColor: '#10b981',
-                boxShadow: '0 0 8px #10b981'
-              }}
-            />
-          )}
-        </button>
-      </div>
+        {hasUpdate && (
+          <span
+            style={{
+              position: 'absolute',
+              top: '-2px',
+              right: '-2px',
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              backgroundColor: '#10b981',
+              boxShadow: '0 0 8px #10b981'
+            }}
+          />
+        )}
+      </motion.div>
 
-      {/* NOTIFICACIÓN / TOAST FLOTANTE ALINEADO */}
+      {/* NOTIFICACIÓN / TOAST FLOTANTE ALINEADO AL ÍCONO */}
       <AnimatePresence>
         {modalOpen && (
           <motion.div
@@ -190,8 +186,8 @@ export default function Header({
             style={{
               position: 'absolute',
               top: 'calc(100% + 8px)',
-              right: '1rem',
-              zIndex: 1000,
+              right: '1.4rem',
+              zIndex: 9999,
               minWidth: '280px',
               maxWidth: '340px',
               padding: '0.85rem 1.1rem',
@@ -209,7 +205,10 @@ export default function Header({
               </div>
               <button
                 type="button"
-                onClick={() => setModalOpen(false)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setModalOpen(false);
+                }}
                 style={{ background: 'transparent', border: 0, color: 'var(--text-muted)', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center' }}
                 title="Cerrar"
               >

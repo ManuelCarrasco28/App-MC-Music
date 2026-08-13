@@ -300,16 +300,31 @@ export default function App() {
       setServerStatus('online');
       setVideoInfo(data);
 
-      const firstResolution = Array.isArray(data.videoResolutions)
+      // Seleccionar automáticamente la resolución recomendada según la pantalla de la PC/Laptop
+      const availableHeights = Array.isArray(data.videoResolutions)
         ? data.videoResolutions
-          .map((value) => String(value?.height ?? value?.id ?? value).match(/\d{3,4}/)?.[0])
-          .find(Boolean)
-        : null;
-      setResolution(firstResolution || 'best');
+          .map((v) => Number(String(v?.height ?? v?.id ?? v).match(/\d{3,4}/)?.[0]))
+          .filter((h) => Number.isFinite(h) && h > 0)
+        : [];
+
+      if (availableHeights.length > 0) {
+        const screenHeight = window.screen?.height || 1080;
+        const screenWidth = window.screen?.width || 1920;
+        const targetDim = Math.min(screenHeight, screenWidth);
+
+        let recommended = availableHeights.find((h) => h === 1080)
+          || availableHeights.find((h) => h === 720)
+          || availableHeights.find((h) => h <= targetDim)
+          || availableHeights[0];
+
+        setResolution(String(recommended));
+      } else {
+        setResolution('best');
+      }
 
       if (Array.isArray(data.audioQualities) && data.audioQualities.length > 0) {
         const normalizedQualities = data.audioQualities.map(String);
-        setQuality((current) => normalizedQualities.includes(current) ? current : normalizedQualities[0]);
+        setQuality(normalizedQualities.includes('320') ? '320' : normalizedQualities[0]);
       }
 
       if (data.platform === 'youtube' && !data.duration && data.id) {

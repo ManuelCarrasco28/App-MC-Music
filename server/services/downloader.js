@@ -522,14 +522,23 @@ function runYtDlpInfo(url) {
   const args = [
     '--dump-single-json',
     '--skip-download',
-    ...getCommonYtDlpArgs(),
+    '--no-warnings',
+    '--no-playlist',
+    '--socket-timeout', '8',
+    '--retries', '2',
+    '--extractor-retries', '2',
+    '--no-check-certificates',
+    '--geo-bypass',
+    '--force-ipv4',
+    '--js-runtimes', `node:${process.execPath}`,
+    '--remote-components', 'ejs:github',
     url
   ];
 
   return new Promise((resolve, reject) => {
     execFile(getYtDlpPath(), args, getYtDlpProcessOptions({
       maxBuffer: 50 * 1024 * 1024,
-      timeout: 60000
+      timeout: 30000
     }), (error, stdout, stderr) => {
       if (error) {
         console.error('[downloader] yt-dlp no pudo leer metadatos:', String(stderr || error.message).slice(-3000));
@@ -568,7 +577,7 @@ export async function getVideoInfo(rawUrl) {
     try {
       const rawInfo = await runYtDlpInfo(url);
       metadata = buildMetadata(rawInfo, url);
-      if (!metadata.duration) {
+      if (!metadata.duration && detectPlatform(url).platform === 'instagram') {
         const probedDuration = await probeRemoteDuration(rawInfo);
         if (probedDuration) {
           metadata.duration = probedDuration;

@@ -99,6 +99,8 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 0.8rem 1.4rem;
+  position: relative;
+  z-index: 100;
 }
 
 .header-navigation {

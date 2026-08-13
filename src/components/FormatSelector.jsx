@@ -31,9 +31,9 @@ function getResolutionLabel(resolution) {
   const labels = {
     2160: '4K Ultra HD',
     1440: '2K QHD',
-    1080: 'Full HD',
-    720: 'HD (Compatible con todos los móviles)',
-    480: 'SD',
+    1080: 'Full HD (Recomendado)',
+    720: 'Alta Definición HD',
+    480: 'Definición Estándar (SD)',
     360: 'Ahorro de datos',
     240: 'Baja resolución'
   };
