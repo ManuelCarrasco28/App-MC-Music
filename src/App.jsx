@@ -308,13 +308,10 @@ export default function App() {
         : [];
 
       if (availableHeights.length > 0) {
-        const screenHeight = window.screen?.height || 1080;
-        const screenWidth = window.screen?.width || 1920;
-        const targetDim = Math.min(screenHeight, screenWidth);
-
         let recommended = availableHeights.find((h) => h === 1080)
           || availableHeights.find((h) => h === 720)
-          || availableHeights.find((h) => h <= targetDim)
+          || availableHeights.find((h) => h === 1440)
+          || availableHeights.find((h) => h === 2160)
           || availableHeights[0];
 
         setResolution(String(recommended));

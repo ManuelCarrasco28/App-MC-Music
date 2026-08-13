@@ -144,7 +144,7 @@ export default function FormatSelector({
                   <span>{option.label}</span>
                 </div>
                 <div className="quality-desc">
-                  {option.description || getResolutionLabel(option.id)}
+                  {getResolutionLabel(option.id)}
                 </div>
               </motion.button>
             ))}
